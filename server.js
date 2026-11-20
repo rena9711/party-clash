@@ -1,0 +1,20 @@
+const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
+const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.static('public'));
+const rooms=new Map(),GAMES=['tap','precision','reaction','memory','dodge','rps','bomb','mine'];
+const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
+const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
+function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,players:[...r.players.values()].map(p=>({id:p.id,name:p.name,score:p.score,ready:p.ready,submitted:p.submitted})),endsAt:r.endsAt,startsAt:r.startsAt,log:r.log.slice(-6),results:r.results||[]}}
+function emit(r){io.to(r.code).emit('room',publicRoom(r))}
+function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
+function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(100,Number(value)||0));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
+function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);r.phase='results';const ordered=[...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,value:p.value,earned:points[i]}));ordered.forEach((p,i)=>p.score+=points[i]);emit(r)}
+function start(r,game){clearTimeout(r.timer);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.endsAt=r.startsAt+(r.game==='memory'?22000:r.game==='rps'?18000:r.game==='bomb'?15000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,endsAt:r.endsAt,seed:r.seed});emit(r);r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+500)}
+io.on('connection',s=>{
+s.on('create',({name}={},ack)=>{let c=code();while(rooms.has(c))c=code();const r={code:c,host:s.id,phase:'lobby',round:0,game:null,players:new Map(),log:[],timer:null};rooms.set(c,r);r.players.set(s.id,{id:s.id,name:clean(name),score:0,ready:false});s.join(c);s.data.room=c;ack?.({ok:true,code:c,id:s.id});emit(r)});
+s.on('join',({code:raw,name}={},ack)=>{const c=String(raw||'').toUpperCase(),r=rooms.get(c);if(!r)return ack?.({error:'房間不存在'});if(r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'遊戲進行中，請稍後加入'});if(r.players.size>=10)return ack?.({error:'房間已滿'});r.players.set(s.id,{id:s.id,name:clean(name),score:0,ready:false});s.join(c);s.data.room=c;ack?.({ok:true,code:c,id:s.id});emit(r)});
+s.on('start',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&r.players.size>=2&&r.phase!=='playing')start(r,game)});
+s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
+s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 啟動防護盾`)}else if(t.shield){t.shield=false;s.emit('notice','對方護盾擋住了攻擊');r.log.push(`${t.name} 擋住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 對 ${t.name} 使用 ${card}`)}emit(r)});
+s.on('disconnect',()=>{const r=get(s);if(!r)return;r.players.delete(s.id);if(!r.players.size){clearTimeout(r.timer);rooms.delete(r.code);return}if(r.host===s.id)r.host=r.players.keys().next().value;if(r.phase==='playing'&&[...r.players.values()].every(p=>p.submitted))finish(r);else emit(r)})
+});
+const PORT=process.env.PORT||3000;server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT));
