@@ -1,0 +1,15 @@
+.pass-summary,.pass-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem}
+.pass-summary small{display:block;margin-top:.25rem;color:#c8bdca;font-size:.875rem}
+.pass-summary .btn,.pass-actions .chip{min-height:44px}
+.pass-page{max-width:48rem;margin:0 auto;padding-bottom:.75rem}
+.pass-page h1{font-size:1.75rem;margin:1rem 0 .5rem}
+.pass-note,.pass-section p{color:#d0c5d3;font-size:.95rem;line-height:1.5}
+.pass-section h2{font-size:1.125rem;margin:.25rem 0 .75rem}
+.pass-section .block+.block{margin-top:.5rem}
+.pass-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr));gap:.75rem}
+.pass-card{display:grid;align-content:start;gap:.35rem;min-width:0}
+.pass-card b{font-size:1.45rem;color:#ffe096}
+.pass-card small,.pass-card span{font-size:.875rem}
+.pass-rights{margin:0 0 .75rem}
+.pass-rights div{display:flex;justify-content:space-between;gap:.75rem;padding:.65rem 0;border-bottom:1px solid #ffffff20}
+.pass-rights dd{margin:0;color:#d0c5d3}
