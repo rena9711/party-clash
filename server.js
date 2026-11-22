@@ -1,7 +1,7 @@
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
 const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
 const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase}=require('./roomStore');
-const rooms=new Map(),GAMES=['tap','precision','reaction','memory','dodge','rps','bomb','mine','race'];
+const rooms=new Map(),GAMES=['tap','precision','reaction','memory','rps','bomb','mine','race'];
 const RACE_ANIMALS=['🐰','🦊','🐻','🐼','🐸','🐯','🦁','🐵','🐷','🐨'];
 
 // 跑得快：服务器权威计时、障碍、星星与移动状态（仅测试玩法）
@@ -51,7 +51,7 @@ let next=b.turn;do{next=(next+1)%b.order.length}while(next!==b.turn&&r.players.g
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:r.selectedGame||'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,animal:p.animal||'',score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name,animal:p.animal}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,animal:p.animal||'',score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name,animal:p.animal}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
 function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
@@ -79,7 +79,7 @@ const DBFILE=path.join(DATA,'demo.json');let db={players:{},scores:[],challenges
 try{db={...db,...JSON.parse(fs.readFileSync(DBFILE,'utf8'))}}catch{}
 function persist(){const tmp=DBFILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(db));fs.renameSync(tmp,DBFILE)}
 function sid(v){return typeof v==='string'&&/^[a-f0-9-]{12,80}$/i.test(v)}
-function gameId(g){return ['tap','precision','reaction','memory','dodge','rps','bomb','mine'].includes(g)}
+function gameId(g){return ['tap','precision','reaction','memory','rps','bomb','mine'].includes(g)}
 function player(id){return db.players[id]}
 function display(id){return player(id)?.name||'玩家'}
 function weekStart(t){const d=new Date(t),day=(d.getUTCDay()+6)%7;return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-day)-8*3600000+(d.getUTCHours()<8? -7*86400000:0)}
