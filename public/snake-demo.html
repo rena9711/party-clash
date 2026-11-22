@@ -23,10 +23,26 @@
 .power-tag.length{color:#ffe48b;border-color:#ffe48b95}
 .power-tag.invincible{color:#8bf8ff;border-color:#8bf8ff95}
 @media(max-height:440px){.power-status{top:48px;font-size:10px}.power-status .power-tag{padding:3px 8px}}
+
+/* Snake skill cards: left thumb, separate from right-side 360 degree joystick. */
+#right{bottom:max(11px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));align-items:flex-start;gap:7px}
+.skill-buttons{display:flex;gap:8px;align-items:stretch}
+.skill-btn{min-width:109px;min-height:64px;padding:9px 10px;border-radius:16px;border:2px solid #8c7cb8b5;background:linear-gradient(145deg,#27274bfa,#121729ed);color:#f5ecff;text-align:center;box-shadow:0 3px 18px #0009;touch-action:manipulation}
+.skill-btn span{display:block;font-size:14px;font-weight:850;white-space:nowrap}
+.skill-btn small{display:block;font-size:10px;color:#d8cce8;margin-top:6px;white-space:nowrap}
+.skill-btn.magnet{border-color:#f4c471a8}.skill-btn.ghost{border-color:#bb9dffac}
+.skill-btn.active{box-shadow:0 0 21px #bda2fa9c;border-color:#fff}
+.skill-btn:disabled{opacity:.52;filter:saturate(.65);cursor:default}
+.skill-btn:not(:disabled):active{transform:scale(.96);background:#584278}
+.utility-buttons{display:flex;gap:6px}
+#right .round-btn{height:29px;min-width:84px;padding:4px 8px;font-size:11px;opacity:.87}
+.power-tag.ghost{color:#e3b1ff;border-color:#dba6ff9c}.power-tag.magnet{color:#ffe099;border-color:#ffe0999c}
+@media(max-height:440px){#right{bottom:max(6px,env(safe-area-inset-bottom));gap:4px}.skill-buttons{gap:5px}.skill-btn{min-width:96px;min-height:49px;padding:6px;border-radius:11px}.skill-btn span{font-size:12px}.skill-btn small{font-size:9px;margin-top:3px}#right .round-btn{height:25px;min-width:78px;font-size:10px}}
+@media(max-width:690px){.skill-btn{min-width:96px}.skill-btn span{font-size:12px}}
 </style></head><body><main id="game"><canvas id="board" aria-label="贪吃蛇游戏区域"></canvas>
 <div id="hud"><div class="title">🐍 <b>贪吃蛇</b><small>360°摇杆 · 横屏试玩版</small></div><div class="stats"><div class="stat"><small>剩余时间</small><strong id="time">60.0s</strong></div><div class="stat"><small>我的积分</small><strong id="score">0</strong></div><div class="stat"><small>当前排名</small><strong id="rank">1/4</strong></div></div></div>
-<div id="leader"></div><div id="power-status" class="power-status" aria-live="polite"></div><div id="stick" aria-label="360度虚拟摇杆"><span class="stick-cross">✧</span><span id="knob" class="knob">●</span></div><div id="right"><button id="reset" class="round-btn">↻ 重开</button><button id="go-full" class="round-btn">⛶ 全屏</button></div><div id="hint">右手360°摇杆 · ⭐普通豆 +10 · ✨闪光×2双倍蛇长 · 🛡️闪光护盾无敌</div>
-<div id="overlay"><div class="modal" id="modal"><div class="mascot">🐍✨</div><h1>贪吃蛇 · 横屏对战</h1><p>右手拖动 <b>360° 摇杆</b>，蛇会平滑转弯，不再局限上下左右。速度稍微加快10%，吃金色「×2」豆可获得3秒双倍蛇长，吃蓝色「盾」豆可获得3秒无敌。碰撞后2秒重生，60秒同地图挑战3条电脑蛇。</p><button class="action" id="start">▶ 开始试玩</button><small>独立测试版 · 暂不加入正式大厅</small></div></div>
+<div id="leader"></div><div id="power-status" class="power-status" aria-live="polite"></div><div id="stick" aria-label="360度虚拟摇杆"><span class="stick-cross">✧</span><span id="knob" class="knob">●</span></div><div id="right"><div class="skill-buttons" aria-label="技能卡"><button type="button" id="skill-magnet" class="skill-btn magnet"><span>🧲 磁力吸豆</span><small id="magnet-label">点击使用 · 4秒</small></button><button type="button" id="skill-ghost" class="skill-btn ghost"><span>👻 幻影穿梭</span><small id="ghost-label">点击使用 · 2秒</small></button></div><div class="utility-buttons"><button id="reset" class="round-btn">↻ 重开</button><button id="go-full" class="round-btn">⛶ 全屏</button></div></div><div id="hint">右手360°摇杆 · ⭐普通豆 +10 · ✨闪光×2双倍蛇长 · 🛡️闪光护盾无敌</div>
+<div id="overlay"><div class="modal" id="modal"><div class="mascot">🐍✨</div><h1>贪吃蛇 · 横屏对战</h1><p>右手拖动 <b>360° 摇杆</b>，蛇会平滑转弯，不再局限上下左右。速度稍微加快10%，吃金色「×2」豆可获得3秒双倍蛇长，吃蓝色「盾」豆可获得3秒无敌。碰撞后2秒重生，60秒同地图挑战3条电脑蛇。左下角可以使用「磁力吸豆」和「幻影穿梭」技能卡。</p><button class="action" id="start">▶ 开始试玩</button><small>独立测试版 · 暂不加入正式大厅</small></div></div>
 <div id="full-help" class="full-help" role="dialog" aria-label="沉浸全屏提示" hidden><div class="full-help-card"><b>📱 iPhone 沉浸全屏</b><p>当前 Safari 不支持网页直接隐藏顶部地址栏和标签栏。你可以点击 Safari 的「分享」→「添加到主屏幕」，再从主屏幕图标打开试玩版，就能用接近 App 的独立窗口显示。</p><button id="close-help" class="round-btn">知道了</button></div></div><div id="rotate"><div><div class="rotate-icon">📱↻</div><div class="rotate-title">请横向握住手机</div><div class="rotate-desc">这个版本为横屏设计<br>转动手机并关闭竖屏锁定即可试玩</div><button id="fullscreen" class="action">尝试全屏横屏</button></div></div>
 </main>
 <script>
@@ -36,14 +52,34 @@ const $=id=>document.getElementById(id),cv=$('board'),ctx=cv.getContext('2d'),W=
 const colors=['#ff85d6','#44d9f2','#ffcf53','#7deb80'],names=['我','闪电小蓝','阳光小黄','青草小绿'];
 const rand=(a,b)=>a+Math.random()*(b-a),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
 let snakes=[],foods=[],elapsed=0,playing=false,last=0,raf=0,desired=null,joyPointer=null;
-const stepSpeed=10.56,turnRate=3.25,collisionRadius=.85;
-function snake(i){return {id:i,name:names[i],color:colors[i],angle:rand(-Math.PI,Math.PI),target:rand(-Math.PI,Math.PI),head:{x:rand(19,W-19),y:rand(13,H-13)},trail:[],score:0,eaten:0,deaths:0,respawn:0,shield:1.15,acc:0,lengthBoostUntil:0,invincibleUntil:0}}
-function spawn(s){for(let j=0;j<80;j++){const head={x:rand(13,W-13),y:rand(10,H-10)};if(snakes.some(p=>p!==s&&p.trail.some((q,i)=>i%5===0&&dist(q,head)<4)))continue;s.head=head;s.angle=rand(-Math.PI,Math.PI);s.target=s.angle;s.trail=[];for(let n=0;n<32;n++)s.trail.push({x:head.x-Math.cos(s.angle)*n*.40,y:head.y-Math.sin(s.angle)*n*.40});s.respawn=0;s.shield=elapsed+1.3;s.lengthBoostUntil=0;s.invincibleUntil=0;return} s.respawn=elapsed+.5}
+const stepSpeed=10.56,turnRate=3.25,collisionRadius=.85,SKILL_COOLDOWN=12,SKILL_MAGNET_TIME=4,SKILL_GHOST_TIME=2,SKILL_MAGNET_RADIUS=11;
+function snake(i){return {id:i,name:names[i],color:colors[i],angle:rand(-Math.PI,Math.PI),target:rand(-Math.PI,Math.PI),head:{x:rand(19,W-19),y:rand(13,H-13)},trail:[],score:0,eaten:0,deaths:0,respawn:0,shield:1.15,acc:0,lengthBoostUntil:0,invincibleUntil:0,magnetUntil:0,ghostUntil:0,magnetReadyAt:0,ghostReadyAt:0}}
+function spawn(s){for(let j=0;j<80;j++){const head={x:rand(13,W-13),y:rand(10,H-10)};if(snakes.some(p=>p!==s&&p.trail.some((q,i)=>i%5===0&&dist(q,head)<4)))continue;s.head=head;s.angle=rand(-Math.PI,Math.PI);s.target=s.angle;s.trail=[];for(let n=0;n<32;n++)s.trail.push({x:head.x-Math.cos(s.angle)*n*.40,y:head.y-Math.sin(s.angle)*n*.40});s.respawn=0;s.shield=elapsed+1.3;s.lengthBoostUntil=0;s.invincibleUntil=0;s.magnetUntil=0;s.ghostUntil=0;return} s.respawn=elapsed+.5}
 function food(type='normal'){for(let t=0;t<120;t++){const f={x:rand(3,W-3),y:rand(3,H-3),r:type==='normal'?rand(.78,1.10):1.35,type,color:type==='length'?'#ffd45c':type==='invincible'?'#85faff':['#ffe365','#69edff','#ff81e4','#bf89ff'][Math.floor(rand(0,4))]};if(snakes.some(s=>s.trail.some((p,i)=>i%5===0&&dist(p,f)<2.1))||foods.some(p=>dist(p,f)<3.4))continue;foods.push(f);return}}
 function reset(){cancelAnimationFrame(raf);elapsed=0;snakes=colors.map((_,i)=>snake(i));snakes.forEach(spawn);foods=[];for(let i=0;i<56;i++)food();for(let i=0;i<2;i++){food('length');food('invincible')}playing=true;last=performance.now();$('overlay').classList.add('hide');draw();raf=requestAnimationFrame(frame)}
-function kill(s){s.trail=[];s.respawn=elapsed+2;s.deaths++;s.score=Math.max(0,s.score-10);s.lengthBoostUntil=0;s.invincibleUntil=0;if(s.id===0&&navigator.vibrate)navigator.vibrate(45)}
+function kill(s){s.trail=[];s.respawn=elapsed+2;s.deaths++;s.score=Math.max(0,s.score-10);s.lengthBoostUntil=0;s.invincibleUntil=0;s.magnetUntil=0;s.ghostUntil=0;if(s.id===0&&navigator.vibrate)navigator.vibrate(45)}
 function extendSnake(s){const wanted=(32+s.eaten*3)*2;if(s.trail.length>=wanted)return;const tail=s.trail[s.trail.length-1],before=s.trail[s.trail.length-2]||{x:tail.x+Math.cos(s.angle)*.38,y:tail.y+Math.sin(s.angle)*.38};const dx=tail.x-before.x,dy=tail.y-before.y;while(s.trail.length<wanted){const last=s.trail[s.trail.length-1];s.trail.push({x:last.x+dx,y:last.y+dy})}}
 
+function useSkill(type){
+ const s=snakes[0];if(!playing||!s||!s.trail.length)return;
+ const until=type==='magnet'?'magnetUntil':'ghostUntil',ready=type==='magnet'?'magnetReadyAt':'ghostReadyAt';
+ if(elapsed<s[ready])return;
+ s[until]=elapsed+(type==='magnet'?SKILL_MAGNET_TIME:SKILL_GHOST_TIME);
+ s[ready]=elapsed+SKILL_COOLDOWN;
+ if(navigator.vibrate)navigator.vibrate(25);
+}
+function skillUI(){
+ const s=snakes[0];for(const [kind,btnId,labelId,activeKey,readyKey] of [
+ ['magnet','skill-magnet','magnet-label','magnetUntil','magnetReadyAt'],
+ ['ghost','skill-ghost','ghost-label','ghostUntil','ghostReadyAt']]){
+ const btn=$(btnId),label=$(labelId);if(!btn||!label)continue;
+ const active=s&&playing&&s.trail.length&&elapsed<s[activeKey];
+ const cooldown=s&&playing?Math.max(0,s[readyKey]-elapsed):0;
+ btn.disabled=!playing||!s||!s.trail.length||cooldown>0;
+ btn.classList.toggle('active',Boolean(active));
+ label.textContent=active?'生效中 '+(s[activeKey]-elapsed).toFixed(1)+'s':cooldown>0?'冷却 '+cooldown.toFixed(1)+'s':kind==='magnet'?'点击使用 · 4秒':'点击使用 · 2秒';
+ }
+}
 function tick(dt){elapsed+=dt;
 for(const s of snakes){if(!s.trail.length){if(s.respawn>0&&elapsed>=s.respawn)spawn(s);continue}
 if(s.id===0){if(desired!==null)s.target=desired}else{
@@ -57,10 +93,14 @@ const difference=wrap(s.target-s.angle),maxTurn=turnRate*dt;s.angle+=Math.max(-m
 const nx=s.head.x+Math.cos(s.angle)*stepSpeed*dt,ny=s.head.y+Math.sin(s.angle)*stepSpeed*dt;
 if(nx<1.2||nx>W-1.2||ny<1.2||ny>H-1.2){if(elapsed>=s.shield&&elapsed>=s.invincibleUntil){kill(s);continue}else{s.target=Math.atan2(H/2-s.head.y,W/2-s.head.x);continue}}
 const next={x:nx,y:ny};
-let crashed=false,killer=null;if(elapsed>=s.shield&&elapsed>=s.invincibleUntil){for(const other of snakes){if(!other.trail.length)continue;const start=other===s?24:10;for(let k=start;k<other.trail.length;k+=3){if(dist(next,other.trail[k])<collisionRadius*1.5){crashed=true;killer=other;break}}if(crashed)break}}
+// Ghost mode ignores other snake bodies and cannot be killed by another snake's body.
+// Wall collisions and the snake's own tail still apply.
+let crashed=false,killer=null;if(elapsed>=s.shield&&elapsed>=s.invincibleUntil){for(const other of snakes){if(!other.trail.length)continue;if(other!==s&&(elapsed<s.ghostUntil||elapsed<other.ghostUntil))continue;const start=other===s?24:10;for(let k=start;k<other.trail.length;k+=3){if(dist(next,other.trail[k])<collisionRadius*1.5){crashed=true;killer=other;break}}if(crashed)break}}
 if(crashed){kill(s);if(killer&&killer!==s)killer.score+=20;continue}
 s.head=next;s.acc+=stepSpeed*dt;while(s.acc>.38){s.acc-=.38;const first=s.trail[0]||next;s.trail.unshift({x:first.x+Math.cos(s.angle)*.38,y:first.y+Math.sin(s.angle)*.38})}
 s.trail[0]={x:next.x,y:next.y};const baseLength=32+s.eaten*3,maxLength=baseLength*(elapsed<s.lengthBoostUntil?2:1);while(s.trail.length>maxLength)s.trail.pop();
+// Magnet attracts food into the head during the next four seconds.
+if(elapsed<s.magnetUntil){for(const f of foods){const d=dist(f,next);if(d<SKILL_MAGNET_RADIUS&&d>.01){const pull=Math.min(d,22*dt*(1.2+(SKILL_MAGNET_RADIUS-d)/SKILL_MAGNET_RADIUS));f.x+=(next.x-f.x)/d*pull;f.y+=(next.y-f.y)/d*pull}}}
 for(let i=foods.length-1;i>=0;i--){const f=foods[i];if(dist(next,f)<(f.type==='normal'?1.9:2.5)){foods.splice(i,1);
 if(f.type==='length'){s.lengthBoostUntil=elapsed+3;extendSnake(s);s.score+=15;}
 else if(f.type==='invincible'){s.invincibleUntil=elapsed+3;s.score+=15;}
@@ -98,13 +138,13 @@ ctx.restore()}
 for(const s of snakes){if(!s.trail.length)continue;ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=s.color;
 ctx.globalAlpha=.18;ctx.lineWidth=3.6;ctx.beginPath();for(let i=s.trail.length-1;i>=0;i--){const p=s.trail[i];if(i===s.trail.length-1)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y)}ctx.stroke();
 ctx.globalAlpha=1;ctx.lineWidth=2.05;ctx.stroke();
-if(elapsed<s.invincibleUntil){ctx.save();ctx.strokeStyle='#9efaff';ctx.globalAlpha=.8;ctx.lineWidth=2.65;ctx.setLineDash([1.2,.9]);ctx.stroke();ctx.restore()}
+if(elapsed<s.invincibleUntil||elapsed<s.ghostUntil){ctx.save();ctx.strokeStyle=elapsed<s.ghostUntil?'#e3b1ff':'#9efaff';ctx.globalAlpha=.85;ctx.lineWidth=2.65;ctx.setLineDash([1.2,.9]);ctx.stroke();ctx.restore()}
 ctx.fillStyle=s.color;ctx.beginPath();ctx.arc(s.head.x,s.head.y,1.43,0,Math.PI*2);ctx.fill();
 const dx=Math.cos(s.angle),dy=Math.sin(s.angle),sx=-dy,sy=dx;for(const k of [-1,1]){const ex=s.head.x+dx*.65+sx*k*.57,ey=s.head.y+dy*.65+sy*k*.57;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(ex,ey,.39,0,Math.PI*2);ctx.fill();ctx.fillStyle='#181c28';ctx.beginPath();ctx.arc(ex+dx*.12,ey+dy*.12,.18,0,Math.PI*2);ctx.fill()}
-if(elapsed<s.shield||elapsed<s.invincibleUntil){ctx.strokeStyle=elapsed<s.invincibleUntil?'#91ffff':'#fff9';ctx.lineWidth=.16;ctx.beginPath();ctx.arc(s.head.x,s.head.y,1.75,0,Math.PI*2);ctx.stroke()}
-ctx.font='2.0px system-ui';ctx.textAlign='center';ctx.fillStyle='#ffe1fb';ctx.fillText(s.name,s.head.x,s.head.y-2.5);ctx.restore()}
+if(elapsed<s.shield||elapsed<s.invincibleUntil||elapsed<s.ghostUntil){ctx.strokeStyle=elapsed<s.ghostUntil?'#e3b1ff':elapsed<s.invincibleUntil?'#91ffff':'#fff9';ctx.lineWidth=.16;ctx.beginPath();ctx.arc(s.head.x,s.head.y,1.75,0,Math.PI*2);ctx.stroke()}
+ctx.font='2.0px system-ui';ctx.textAlign='center';ctx.fillStyle='#ffe1fb';ctx.fillText(s.name,s.head.x,s.head.y-2.5);if(elapsed<s.magnetUntil){ctx.save();ctx.strokeStyle='#f8d16d';ctx.lineWidth=.1;ctx.globalAlpha=.35;ctx.beginPath();ctx.arc(s.head.x,s.head.y,SKILL_MAGNET_RADIUS,0,Math.PI*2);ctx.stroke();ctx.restore()}ctx.restore()}
 $('time').textContent=Math.max(0,DURATION-elapsed).toFixed(1)+'s';$('score').textContent=snakes[0]?.score||0;
-const me=snakes[0];$('power-status').innerHTML=(me&&elapsed<me.lengthBoostUntil?'<span class="power-tag length">✨ 双倍蛇长 '+(me.lengthBoostUntil-elapsed).toFixed(1)+'s</span>':'')+(me&&elapsed<me.invincibleUntil?'<span class="power-tag invincible">🛡️ 无敌 '+(me.invincibleUntil-elapsed).toFixed(1)+'s</span>':'');
+const me=snakes[0];$('power-status').innerHTML=(me&&elapsed<me.lengthBoostUntil?'<span class="power-tag length">✨ 双倍蛇长 '+(me.lengthBoostUntil-elapsed).toFixed(1)+'s</span>':'')+(me&&elapsed<me.invincibleUntil?'<span class="power-tag invincible">🛡️ 无敌 '+(me.invincibleUntil-elapsed).toFixed(1)+'s</span>':'')+(me&&elapsed<me.ghostUntil?'<span class="power-tag ghost">👻 幻影 '+(me.ghostUntil-elapsed).toFixed(1)+'s</span>':'')+(me&&elapsed<me.magnetUntil?'<span class="power-tag magnet">🧲 磁力 '+(me.magnetUntil-elapsed).toFixed(1)+'s</span>':'');skillUI();
 const ranked=[...snakes].sort((a,b)=>b.score-a.score||a.deaths-b.deaths);$('rank').textContent=(ranked.indexOf(snakes[0])+1)+'/4';
 $('leader').innerHTML=ranked.map((s,i)=>'<div class="leader-row '+(s.id===0?'me':'')+'"><span>'+(i+1)+'</span><i class="swatch" style="background:'+s.color+';color:'+s.color+'"></i><span>'+s.name+'</span><span>'+s.score+'</span></div>').join('');
 }
@@ -124,6 +164,7 @@ async function enterFullscreen(){
 }
 $('start').onclick=reset;$('reset').onclick=reset;
 $('go-full').onclick=enterFullscreen;
+$('skill-magnet').onclick=()=>useSkill('magnet');$('skill-ghost').onclick=()=>useSkill('ghost');
 $('fullscreen').onclick=enterFullscreen;
 $('close-help').onclick=()=>{$('full-help').hidden=true};
 document.addEventListener('fullscreenchange',()=>{$('go-full').textContent=document.fullscreenElement?'⤡ 退出全屏':'⛶ 全屏'});
