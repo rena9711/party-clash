@@ -29,7 +29,7 @@ function raceTick(r){if(r.phase!=='playing'||r.game!=='race'||!r.race)return;con
       p.collided.push(o.id);if(now<p.jumpUntil){p.score+=12}else if(now>=p.stunUntil){p.hp--;p.hits++;p.stunUntil=now+1150;if(p.hp<=0){p.finished=true;p.boost=false}}
     }
     for(const star of g.stars){if(star.p>p.p+5||star.p<previous-13||star.l!==p.l||p.taken.includes(star.id))continue;
-      p.taken.push(star.id);p.stars++;p.score+=20;p.energy=Math.min(100,p.energy+10);
+      p.taken.push(star.id);p.stars++;p.score+=10;p.energy=Math.min(100,p.energy+10);
       if(p.stars%5===0)p.autoUntil=Math.max(p.autoUntil,now)+2500;
     }
     if(p.p>=3900)p.finished=true;
@@ -37,7 +37,7 @@ function raceTick(r){if(r.phase!=='playing'||r.game!=='race'||!r.race)return;con
   io.to(r.code).emit('race-state',raceSnapshot(r));
   if(g.runners.every(p=>p.finished))finish(r);
 }
-function finishRace(r){const racers=r.race?.runners||[];for(const runner of racers){const p=r.players.get(runner.id);if(p){p.value=Math.max(0,Math.round(runner.p+runner.stars*5-runner.hits*20));p.submitted=true;}}}
+function finishRace(r){const racers=r.race?.runners||[];for(const runner of racers){const p=r.players.get(runner.id);if(p){p.value=runner.stars*10;p.submitted=true;}}}
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
@@ -47,7 +47,7 @@ function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==fals
 function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
 function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
 function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(100,Number(value)||0));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
-function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);r.raceInterval=null;if(r.game==='race')finishRace(r);r.phase='results';const ordered=[...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,value:p.value,earned:points[i]}));ordered.forEach((p,i)=>p.score+=points[i]);emit(r)}
+function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);r.raceInterval=null;if(r.game==='race')finishRace(r);r.phase='results';const ordered=[...r.players.values()].sort((a,b)=>{if(r.game==='race'){const ra=r.race?.runners.find(x=>x.id===a.id),rb=r.race?.runners.find(x=>x.id===b.id);return b.value-a.value||(rb?.p||0)-(ra?.p||0)}return b.value-a.value});const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,value:p.value,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.p||0):undefined,earned:points[i]}));ordered.forEach((p,i)=>p.score+=points[i]);emit(r)}
 function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=r.game==='race'?makeRace(r):null;r.endsAt=r.startsAt+(r.game==='race'?30000:r.game==='memory'?22000:r.game==='rps'?18000:r.game==='bomb'?15000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='race'){r.race.lastTick=r.startsAt;r.raceInterval=setInterval(()=>raceTick(r),100);io.to(r.code).emit('race-state',raceSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
 io.on('connection',s=>{
 s.on('create',async({name,session}={},ack)=>{let c=code();while(rooms.has(c))c=code();const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null};rooms.set(c,r);r.players.set(s.id,{id:s.id,name:clean(name),session:typeof session==='string'?session.slice(0,80):'',score:0,ready:false,online:true});s.join(c);s.data.room=c;try{await saveRoom(r);ack?.({ok:true,code:c,id:s.id});emit(r)}catch(e){rooms.delete(c);s.leave(c);s.data.room=null;ack?.({error:'房间保存失败，请重试'});console.error('Create room persistence:',e.message)}});
