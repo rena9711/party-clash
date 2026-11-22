@@ -1,15 +1,47 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#111116"><title>贪吃蛇｜独立试玩版 · 大乱斗</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#080d18"><title>贪吃蛇｜独立试玩版 · 大乱斗</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;background:#111116;color:#fff;font-family:system-ui,-apple-system,"PingFang SC",sans-serif;overscroll-behavior:none}button{font:inherit;cursor:pointer;touch-action:manipulation}#app{max-width:520px;margin:auto;height:100dvh;min-height:610px;padding:12px 12px calc(9px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:9px;background:radial-gradient(ellipse at 50% -17%,#62365070,transparent 63%),#111116;overflow:hidden}.top{display:flex;align-items:center;justify-content:space-between;gap:8px}.brand{font-size:20px;font-weight:950;letter-spacing:-.7px}.brand em{font-style:normal;color:#f8bbd0}.beta{font-size:10px;color:#f8bbd0;border:1px solid #f8bbd05c;background:#422c3a;border-radius:30px;padding:6px 9px}.desc{font-size:11px;color:#cdbec9;text-align:center}.hud{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.stat{border:1px solid #534050;border-radius:13px;background:#251f2b;text-align:center;padding:8px 4px}.stat small{display:block;font-size:10px;color:#afa4b0}.stat b{font-size:20px;color:#ffdfeb}.scoreboard{display:flex;gap:5px;justify-content:space-around;min-height:29px}.scoreitem{font-size:10px;display:flex;align-items:center;gap:3px;background:#28222c;border:1px solid #423644;padding:5px 8px;border-radius:12px;white-space:nowrap}.scoreitem.you{border-color:#f8bbd0;color:#ffdfeb}.dot{display:inline-block;width:8px;height:8px;border-radius:50%}.board-box{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}.board-wrap{position:relative;aspect-ratio:24/32;max-height:100%;max-width:100%;width:auto;height:100%;border:2px solid #765366;border-radius:14px;overflow:hidden;background:#191a1f;box-shadow:0 11px 32px #0008}canvas{display:block;width:100%;height:100%}.overlay{position:absolute;inset:0;background:#141117df;display:flex;align-items:center;justify-content:center;z-index:5;padding:20px}.overlay.hidden{display:none}.modal{border:1px solid #f8bbd057;border-radius:22px;padding:22px 16px;background:radial-gradient(circle at top right,#6b3b55,#302432 64%);max-width:360px;width:100%;text-align:center;box-shadow:0 20px 45px #000a}.mascot{font-size:66px}.modal h1{font-size:29px;margin:9px 0}.modal p{font-size:13px;color:#e4d2db;line-height:1.8}.modal .action{width:100%;border:0;border-radius:14px;background:#f8bbd0;color:#30212a;font-size:17px;font-weight:900;padding:13px;margin-top:10px}.modal small{display:block;margin-top:13px;color:#b8a6b1;font-size:10px}.controls{display:flex;justify-content:space-between;align-items:center;gap:7px;min-height:128px}.guide{font-size:12px;color:#f6dde8;line-height:1.7}.guide b{color:#f8bbd0;font-size:14px}.guide small{display:block;color:#bcb0bd;font-size:10px}.joy{width:112px;height:112px;border-radius:50%;border:2px solid #d997b788;background:#332635;position:relative;touch-action:none;flex:none;box-shadow:inset 0 0 24px #110d15}.joy:before{content:"↑";position:absolute;left:50%;top:8px;transform:translateX(-50%);opacity:.55}.joy:after{content:"↓";position:absolute;left:50%;bottom:7px;transform:translateX(-50%);opacity:.55}.joy .hints{position:absolute;left:0;right:0;top:45px;font-size:12px;color:#cbb5c6;text-align:center;pointer-events:none}.thumb{width:49px;height:49px;border-radius:50%;position:absolute;left:50%;top:50%;margin:-24.5px 0 0 -24.5px;background:radial-gradient(circle at 30% 30%,#fff0f5,#f8bbd0);box-shadow:0 4px 18px #08060a80;border:2px solid #fff5;pointer-events:none;display:flex;align-items:center;justify-content:center;color:#9d5877}.status{color:#f8bbd0;font-size:12px;text-align:center;min-height:19px}.foot{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:10px;color:#9d929d}.foot a{color:#eac2d4;text-decoration:none}.debug{font-size:10px;color:#a799a6}.tiny-btn{border:1px solid #584356;background:#352637;color:#f2ccdc;border-radius:12px;padding:7px 10px;font-size:11px}@media(max-height:720px){#app{gap:5px;padding-top:7px}.stat{padding:4px}.stat b{font-size:17px}.controls{min-height:101px}.joy{width:94px;height:94px}.desc{display:none}}@media(max-width:360px){.scoreitem{padding:4px;font-size:9px}.brand{font-size:18px}.guide{font-size:11px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+
+/* B款霓虹视觉 — soft high-contrast, cyan / pink / gold accents */
+html,body{background:#070b15}
+#app{background:radial-gradient(ellipse at 110% 1%,#132d48a0,transparent 38%),radial-gradient(ellipse at 3% 69%,#351535a3,transparent 50%),#090d19;max-width:540px}
+.brand{font-size:22px;text-shadow:0 0 18px #bc67f780}
+.brand em{color:#f7a8fb;text-shadow:0 0 13px #db5eea94}
+.beta{color:#e6b4fa;border-color:#a465da88;background:#291a3bc9;box-shadow:0 0 14px #9239af40}
+.desc{color:#bac5e7}
+.hud{gap:5px}
+.stat{border:1px solid #65508a9c;background:linear-gradient(110deg,#1b1830,#1a1930bf);border-radius:15px;box-shadow:inset 0 0 15px #8f59ad12,0 0 11px #654b9430}
+.stat small{color:#c3b9df}
+.stat b{color:#f5e9ff;text-shadow:0 0 10px #5aa7e977;font-variant-numeric:tabular-nums}
+.stat:nth-child(1) b{color:#5fe4f7}
+.stat:nth-child(2) b{color:#ffdf76}
+.stat:nth-child(3) b{color:#cb9afa}
+.scoreitem{background:#15172abf;border-color:#53486e;color:#eae6fa;border-radius:14px}
+.scoreitem.you{border-color:#ed7bd0;color:#ffd5f4;box-shadow:0 0 12px #b52d9740}
+.dot{box-shadow:0 0 9px currentColor}
+.board-wrap{background:#0b1120;border-color:#765ab2;border-radius:18px;box-shadow:0 0 14px #8a56df48,0 0 32px #153e66a1,0 13px 40px #0009}
+.status{color:#85efff;text-shadow:0 0 11px #00ddf36b}
+.guide{color:#dce3f5}
+.guide b{color:#ffa3e2}
+.guide small{color:#aaa8c7}
+.joy{background:radial-gradient(circle,#36365490,#24223cb8);border:1px solid #ad9ddd99;box-shadow:inset 0 0 30px #a6a0f23a,0 0 20px #8a80f82a}
+.thumb{background:radial-gradient(circle at 25% 20%,#ffffff,#c9baff 60%,#8e81d3);border-color:#e9e5ff;box-shadow:0 0 16px #b8acfc8a,0 4px 16px #090617a0;color:#7465af}
+.tiny-btn{border-color:#ad79d6;background:#2d2144;color:#f0d6ff;box-shadow:0 0 11px #ad72c92f}
+.modal{background:radial-gradient(circle at 95% 4%,#48305f,#20192e 62%);border-color:#b777de9a}
+.modal h1{color:#ffe7ff}
+.modal .action{background:linear-gradient(100deg,#fa98dd,#bd9af7);color:#1e1830;box-shadow:0 0 20px #bd74e854}
+.overlay{background:#080b17dd}
+.foot a{color:#d8a4ee}
+
 </style></head>
-<body><main id="app"><div class="top"><div class="brand">🐍 <em>贪吃蛇</em> <span style="font-size:11px;font-weight:400">PARTY CLASH</span></div><span class="beta">独立试玩 · 不进大厅</span></div><div class="desc">同一地图 · 自动前进 · 食物 +10 分 · 撞击后 2 秒重生</div><div class="hud"><div class="stat"><small>⏱ 剩余时间</small><b id="time">60.0s</b></div><div class="stat"><small>⭐ 我的积分</small><b id="score">0</b></div><div class="stat"><small>🏆 当前排名</small><b id="rank">1 / 4</b></div></div><div id="leaders" class="scoreboard"></div><div class="board-box"><div class="board-wrap"><canvas id="board"></canvas><div class="overlay" id="overlay"><div class="modal" id="modal"><div class="mascot">🐍</div><h1>贪吃蛇大乱斗</h1><p>60 秒同图混战！拖动右下角摇杆改变方向，吃到豆子加 10 分。撞墙、撞到自己或其他蛇会死亡，<b>2 秒后自动重生</b>，分数保留（每次死亡扣 10 分）。</p><button class="action" id="start">▶ 开始试玩</button><small>当前为单人操控 + 3 条电脑蛇。多人联机版待你确认玩法后再加入首页。</small></div></div></div></div><div id="status" class="status">拖动摇杆控制方向，蛇会自动前进</div><div class="controls"><div class="guide"><b>🎮 右侧摇杆</b><div>向上、下、左、右拖动</div><div>吃豆变长 · 避免撞击</div><small>电脑也可以用方向键 / WASD</small><div style="margin-top:12px"><button id="restart" class="tiny-btn">↻ 重新开始</button></div></div><div id="joy" class="joy" aria-label="拖动摇杆控制贪吃蛇"><div class="hints">◀　　　 ▶</div><div id="thumb" class="thumb">●</div></div></div><div class="foot"><span>玩法验证版 · 所有玩家积分在本机模拟</span><a href="/">返回大厅</a></div></main>
+<body><main id="app"><div class="top"><div class="brand">🐍 <em>贪吃蛇</em> <span style="font-size:11px;font-weight:400">PARTY CLASH</span></div><span class="beta">霓虹版 · 独立试玩</span></div><div class="desc">60秒竞技 · 霓虹光点 +10分 · 撞击后2秒重生</div><div class="hud"><div class="stat"><small>⏱ 剩余时间</small><b id="time">60.0s</b></div><div class="stat"><small>⭐ 我的积分</small><b id="score">0</b></div><div class="stat"><small>🏆 当前排名</small><b id="rank">1 / 4</b></div></div><div id="leaders" class="scoreboard"></div><div class="board-box"><div class="board-wrap"><canvas id="board"></canvas><div class="overlay" id="overlay"><div class="modal" id="modal"><div class="mascot">🐍</div><h1>贪吃蛇大乱斗</h1><p>60 秒同图混战！拖动右下角摇杆改变方向，吃到豆子加 10 分。撞墙、撞到自己或其他蛇会死亡，<b>2 秒后自动重生</b>，分数保留（每次死亡扣 10 分）。</p><button class="action" id="start">▶ 开始试玩</button><small>当前为单人操控 + 3 条电脑蛇。多人联机版待你确认玩法后再加入首页。</small></div></div></div></div><div id="status" class="status">移动摇杆改变方向，收集发光豆豆</div><div class="controls"><div class="guide"><b>🎮 右侧摇杆</b><div>向上、下、左、右拖动</div><div>吃豆变长 · 避免撞击</div><small>电脑也可以用方向键 / WASD</small><div style="margin-top:12px"><button id="restart" class="tiny-btn">↻ 重新开始</button></div></div><div id="joy" class="joy" aria-label="拖动摇杆控制贪吃蛇"><div class="hints">◀　　　 ▶</div><div id="thumb" class="thumb">●</div></div></div><div class="foot"><span>霓虹UI预览 · 3条电脑蛇模拟对战</span><a href="/">返回大厅</a></div></main>
 <script>
 (()=>{
 'use strict';
 const W=24,H=32,ROUND=60,STEP=.15,FOODS=19;
 const q=id=>document.getElementById(id),canvas=q('board'),ctx=canvas.getContext('2d');
-const colors=['#f8bbd0','#ffe5a1','#83d8bc','#b4a2ff'],names=['你','黄蛇','绿蛇','紫蛇'];
+const colors=['#ff77ca','#ffd34c','#39d9ed','#74f96d'],names=['你','黄蛇','绿蛇','紫蛇'];
 let snakes=[],foods=[],running=false,last=0,elapsed=0,acc=0,raf=0,message='',messageUntil=0,seed=0;
 const rand=n=>Math.floor(Math.random()*n),equal=(a,b)=>a.x===b.x&&a.y===b.y,dirs=[{x:1,y:0},{x:0,y:1},{x:-1,y:0},{x:0,y:-1}];
 function occupied(c){return snakes.some(s=>s.body.some(p=>equal(p,c)))}
@@ -33,10 +65,40 @@ refreshHud();
 }
 function refreshHud(){q('time').textContent=Math.max(0,ROUND-elapsed).toFixed(1)+'s';q('score').textContent=snakes[0]?.score||0;const sorted=[...snakes].sort((a,b)=>b.score-a.score||a.deaths-b.deaths);q('rank').textContent=sorted.indexOf(snakes[0])+1+' / '+snakes.length;q('leaders').innerHTML=sorted.map(s=>'<span class="scoreitem '+(s===snakes[0]?'you':'')+'"><i class="dot" style="background:'+s.color+'"></i>'+s.name+' '+s.score+'</span>').join('');if(elapsed>messageUntil)q('status').textContent=snakes[0]?.body.length?'🐍 继续吃豆，争取更高积分！':'💥 等待重生…'}
 function finish(){running=false;cancelAnimationFrame(raf);const sorted=[...snakes].sort((a,b)=>b.score-a.score||a.deaths-b.deaths),me=snakes[0],rank=sorted.indexOf(me)+1;q('overlay').classList.remove('hidden');q('modal').innerHTML='<div class="mascot">'+(rank===1?'🏆':'🐍')+'</div><h1>60 秒挑战结束！</h1><p>你的排名：第 <b>'+rank+'</b> / 4 名<br>累计积分：<b>'+me.score+'</b> 分<br>吃到豆子：'+me.food+' 颗 · 碰撞：'+me.deaths+' 次</p><button class="action" id="start">↻ 再玩一次</button><small>本局为单机试玩，其他 3 条蛇由电脑控制。</small>';q('start').onclick=reset}
-function draw(){const dpr=Math.min(2,window.devicePixelRatio||1),px=24*dpr;const bw=W*px,bh=H*px;if(canvas.width!==bw||canvas.height!==bh){canvas.width=bw;canvas.height=bh}ctx.setTransform(px,0,0,px,0,0);ctx.fillStyle='#191a20';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#2d2a33';ctx.lineWidth=.035;for(let x=0;x<=W;x++){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<=H;y++){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
-for(const f of foods){ctx.fillStyle='#ffdf7c';ctx.beginPath();ctx.arc(f.x+.5,f.y+.5,.26,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff2bf';ctx.beginPath();ctx.arc(f.x+.44,f.y+.40,.1,0,Math.PI*2);ctx.fill()}
-for(const s of snakes){for(let i=s.body.length-1;i>=0;i--){const b=s.body[i];ctx.fillStyle=s.color;ctx.globalAlpha=i===0?1:Math.max(.55,1-i*.028);ctx.beginPath();ctx.roundRect(b.x+.055,b.y+.055,.89,.89,i===0?.3:.22);ctx.fill();ctx.globalAlpha=1;if(i===0){ctx.fillStyle='#23202a';let ex=s.dir.y!==0?.21:.13,ey=s.dir.x!==0?.21:.13;ctx.beginPath();ctx.arc(b.x+.34+ex,b.y+.32+ey,.075,0,Math.PI*2);ctx.arc(b.x+.68+ex,b.y+.32+ey,.075,0,Math.PI*2);ctx.fill()}}}
-if(snakes[0]&&!snakes[0].body.length&&running){ctx.fillStyle='#f8bbd0';ctx.font='bold 1.2px system-ui';ctx.textAlign='center';ctx.fillText('💥 等待重生…',W/2,H/2)}
+
+function draw(){
+ const dpr=Math.min(2,window.devicePixelRatio||1),px=24*dpr,bw=W*px,bh=H*px;
+ if(canvas.width!==bw||canvas.height!==bh){canvas.width=bw;canvas.height=bh}
+ ctx.setTransform(px,0,0,px,0,0);
+ const bg=ctx.createLinearGradient(0,0,W,H);bg.addColorStop(0,'#0a1120');bg.addColorStop(.58,'#0a0d1b');bg.addColorStop(1,'#101126');ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+ // Delicate hexagonal pattern instead of the harsh chessboard-style grid.
+ ctx.save();ctx.lineWidth=.048;ctx.strokeStyle='#2d3d6750';const rx=2.25,ry=1.94;
+ for(let row=-1;row<=Math.ceil(H/(ry*1.5));row++)for(let col=-1;col<=Math.ceil(W/(rx*1.75));col++){const x=col*rx*1.73+(row%2)*rx*.865,y=row*ry*1.5;ctx.beginPath();for(let i=0;i<6;i++){const a=i*Math.PI/3;const vx=x+rx*Math.cos(a),vy=y+ry*Math.sin(a);if(!i)ctx.moveTo(vx,vy);else ctx.lineTo(vx,vy)}ctx.closePath();ctx.stroke()}ctx.restore();
+ // Bright, readable pellets (50% larger) with a restrained soft glow.
+ const palette=['#ffe15b','#61ecff','#ff69dc','#b684ff'];
+ for(let i=0;i<foods.length;i++){
+  const f=foods[i],color=palette[(f.x*7+f.y*13+i)%palette.length],cx=f.x+.5,cy=f.y+.5;
+  ctx.save();ctx.fillStyle=color;ctx.globalAlpha=.12;ctx.beginPath();ctx.arc(cx,cy,.83,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.22;ctx.beginPath();ctx.arc(cx,cy,.62,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+  ctx.shadowBlur=0;ctx.fillStyle=color;ctx.beginPath();ctx.arc(cx,cy,.405,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fffdf2';ctx.globalAlpha=.73;ctx.beginPath();ctx.arc(cx-.14,cy-.14,.13,0,Math.PI*2);ctx.fill();ctx.restore();
+ }
+ for(const snake of snakes){
+  if(!snake.body.length)continue;
+  const s=snake,body=s.body,head=body[0],shield=running&&elapsed<s.protected;
+  ctx.save();ctx.strokeStyle=s.color;ctx.lineCap='round';ctx.lineJoin='round';
+  if(body.length>1){ctx.globalAlpha=.16;ctx.lineWidth=1.30;ctx.beginPath();for(let i=body.length-1;i>=0;i--){const p=body[i];if(i===body.length-1)ctx.moveTo(p.x+.5,p.y+.5);else ctx.lineTo(p.x+.5,p.y+.5)}ctx.stroke();ctx.globalAlpha=1;ctx.lineWidth=.78;ctx.stroke();}
+  // Tapered individual round links eliminate visible right-angle square blocks.
+  for(let i=body.length-1;i>=1;i--){const p=body[i],t=i/(body.length||1);ctx.globalAlpha=Math.max(.60,1-t*.23);ctx.fillStyle=s.color;ctx.beginPath();ctx.arc(p.x+.5,p.y+.5,.38,0,Math.PI*2);ctx.fill()}
+  ctx.globalAlpha=1;ctx.fillStyle=s.color;ctx.beginPath();ctx.arc(head.x+.5,head.y+.5,.49,0,Math.PI*2);ctx.fill();
+  if(shield){ctx.strokeStyle='#fff9fa';ctx.globalAlpha=.55;ctx.lineWidth=.065;ctx.beginPath();ctx.arc(head.x+.5,head.y+.5,.56,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1}
+  // Distinctive face with expressive eyes facing movement direction.
+  const eyeShiftX=s.dir.x*.14,eyeShiftY=s.dir.y*.14;
+  const positions=s.dir.x!==0?[[.5+eyeShiftX,.33],[.5+eyeShiftX,.68]]:[[.34,.5+eyeShiftY],[.67,.5+eyeShiftY]];
+  for(const [ex,ey]of positions){ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(head.x+ex,head.y+ey,.135,0,Math.PI*2);ctx.fill();ctx.fillStyle='#182130';ctx.beginPath();ctx.arc(head.x+ex+s.dir.x*.05,head.y+ey+s.dir.y*.05,.071,0,Math.PI*2);ctx.fill()}
+  // Tiny highlight adds gloss without harsh bloom.
+  ctx.fillStyle='#ffffff';ctx.globalAlpha=.32;ctx.beginPath();ctx.arc(head.x+.32,head.y+.26,.10,0,Math.PI*2);ctx.fill();ctx.restore();
+ }
+ if(snakes[0]&&!snakes[0].body.length&&running){ctx.save();ctx.font='bold 1.05px system-ui';ctx.textAlign='center';ctx.shadowColor='#ff77ca';ctx.shadowBlur=.4;ctx.fillStyle='#ffd5ed';ctx.fillText('💥 2 秒后重生…',W/2,H/2);ctx.restore()}
 }
 function frame(ts){if(!running)return;let dt=Math.min(.08,Math.max(0,(ts-last)/1000));last=ts;elapsed+=dt;acc+=dt;while(acc>=STEP){acc-=STEP;update()}draw();if(elapsed>=ROUND){elapsed=ROUND;refreshHud();finish();return}raf=requestAnimationFrame(frame)}
 function input(x,y){if(!running||!snakes[0]?.body.length)return;const s=snakes[0];if(x===-s.dir.x&&y===-s.dir.y)return;s.next={x,y}}
