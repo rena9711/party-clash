@@ -15,7 +15,7 @@ function makeRace(r){const participants=[...r.players.values()].filter(p=>p.onli
   }
   return {runners:participants.map((p,i)=>({id:p.id,name:p.name,animal:RACE_ANIMALS.includes(p.animal)?p.animal:RACE_ANIMALS[i%RACE_ANIMALS.length],lane:1,p:0,hp:3,stars:0,energy:100,autoUntil:0,jumpUntil:0,stunUntil:0,boost:false,hits:0,score:0,taken:[],collided:[],finished:false})),obstacles,stars,lastTick:Date.now(),duration:30000};
 }
-function raceSnapshot(r){const g=r.race;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,runners:g.runners.map(p=>({id:p.id,name:p.name,animal:p.animal,lane:p.lane,p:Math.round(p.p),hp:p.hp,stars:p.stars,energy:Math.round(p.energy),boost:p.boost,autoUntil:p.autoUntil,jumpUntil:p.jumpUntil,stunUntil:p.stunUntil,finished:p.finished})),obstacles:g.obstacles,stars:g.stars};}
+function raceSnapshot(r){const g=r.race;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,runners:g.runners.map(p=>({id:p.id,name:p.name,animal:p.animal,lane:p.lane,p:Math.round(p.p),hp:p.hp,stars:p.stars,energy:Math.round(p.energy),boost:p.boost,autoUntil:p.autoUntil,jumpUntil:p.jumpUntil,stunUntil:p.stunUntil,finished:p.finished,taken:p.taken})),obstacles:g.obstacles,stars:g.stars};}
 function raceTick(r){if(r.phase!=='playing'||r.game!=='race'||!r.race)return;const g=r.race,now=Date.now();
   if(now<r.startsAt){io.to(r.code).emit('race-state',raceSnapshot(r));return}
   const delta=Math.max(0,Math.min(.25,(now-g.lastTick)/1000));g.lastTick=now;
