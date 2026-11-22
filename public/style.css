@@ -44,3 +44,10 @@ body.rm-active main{max-width:100vw;padding:0;height:100dvh;min-height:100dvh;ba
 .bomb-panel input{font-size:24px;font-weight:800;text-align:center;color:#fff}
 .bomb-panel .btn{background:#f8bbd0;color:#261b23}
 @keyframes bomb-shake{0%,88%,100%{transform:rotate(0) scale(1)}91%{transform:rotate(-5deg)}94%{transform:rotate(5deg)}97%{transform:rotate(-3deg)}}
+
+/* 大爆炸横向数字滑杆 */
+.bomb-picked{font-size:clamp(50px,16vw,76px);font-weight:950;line-height:1.25;text-align:center;color:#ffe4a6;text-shadow:0 0 23px #f6b65755;margin:14px 0}
+.bomb-slider{display:block!important;appearance:none;-webkit-appearance:none;width:100%;height:15px!important;min-height:15px!important;border-radius:100px;background:linear-gradient(90deg,#edb0c6,#f8bbd0 55%,#ffe0a4)!important;border:0!important;padding:0!important;margin:24px 0 12px!important;touch-action:pan-x;cursor:pointer}
+.bomb-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:42px;height:42px;border-radius:50%;background:#fff0f5;border:5px solid #f0a3c0;box-shadow:0 4px 12px #0007,0 0 0 6px #f8bbd031;cursor:grab}
+.bomb-slider::-moz-range-thumb{width:34px;height:34px;border-radius:50%;background:#fff0f5;border:5px solid #f0a3c0;box-shadow:0 4px 12px #0007;cursor:grab}
+.bomb-slider-ends{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;color:#f5d4df;font-size:16px;font-weight:800}
