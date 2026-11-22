@@ -35,12 +35,17 @@ html,body{background:#070b15}
 .foot a{color:#d8a4ee}
 
 
-/* Four tactile controls, replacing drag joystick */
-.dpad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,40px);gap:3px;align-items:stretch;justify-items:stretch;touch-action:manipulation;flex:none;user-select:none;-webkit-user-select:none}
-.dir-btn{border:1px solid #c2a5fb9c;background:linear-gradient(155deg,#55416f,#29233d);color:#f6e7ff;border-radius:12px;font-size:21px;font-weight:900;box-shadow:inset 0 1px 2px #ffffff3b,0 3px 10px #10091b99,0 0 12px #9166da36;min-width:0;min-height:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.dir-btn:active,.dir-btn.pressed{background:linear-gradient(145deg,#f0c6ff,#bc9bfa);color:#24152c;box-shadow:0 0 18px #c088fa9a;transform:scale(.96)}
-.dir-up{grid-column:2;grid-row:1}.dir-left{grid-column:1;grid-row:2}.dir-center{grid-column:2;grid-row:2;display:grid;place-items:center;color:#8e72ac;font-size:19px}.dir-right{grid-column:3;grid-row:2}.dir-down{grid-column:2;grid-row:3}
-@media(max-height:720px){.dpad{grid-template-columns:repeat(3,41px);grid-template-rows:repeat(3,34px);gap:2px}.dir-btn{font-size:19px;border-radius:10px}.controls{min-height:110px}}
+/* Enlarged ergonomic four-way control for thumb taps */
+.controls{min-height:190px;align-items:center;gap:5px}
+.guide{flex:1;min-width:0;font-size:11px;line-height:1.65}
+.guide b{font-size:13px}
+.dpad{display:grid;grid-template-columns:repeat(3,60px);grid-template-rows:repeat(3,56px);gap:5px;touch-action:manipulation;flex:none;user-select:none;-webkit-user-select:none}
+.dir-btn{border:2px solid #c2a5fbd4;background:linear-gradient(155deg,#6a5187,#302644);color:#fff2ff;border-radius:17px;font-size:29px;font-weight:950;box-shadow:inset 0 2px 4px #ffffff35,0 4px 10px #10091b99,0 0 15px #9166da36;min-width:0;min-height:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;display:grid;place-items:center}
+.dir-btn:active,.dir-btn.pressed{background:linear-gradient(145deg,#f0c6ff,#bc9bfa);color:#24152c;box-shadow:0 0 22px #c088fabd;transform:scale(.95)}
+.dir-up{grid-column:2;grid-row:1}.dir-left{grid-column:1;grid-row:2}.dir-center{grid-column:2;grid-row:2;display:grid;place-items:center;color:#a887c5;font-size:23px}.dir-right{grid-column:3;grid-row:2}.dir-down{grid-column:2;grid-row:3}
+@media(max-height:760px){#app{gap:4px;padding-top:6px}.controls{min-height:163px}.dpad{grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,48px);gap:4px}.dir-btn{font-size:26px;border-radius:14px}.guide{font-size:10px}.guide small{font-size:9px}}
+@media(max-width:360px){.dpad{grid-template-columns:repeat(3,53px);grid-template-rows:repeat(3,49px);gap:4px}.controls{min-height:166px}.guide{font-size:10px}}
+@media(max-height:640px){.controls{min-height:145px}.dpad{grid-template-columns:repeat(3,49px);grid-template-rows:repeat(3,43px);gap:4px}.dir-btn{font-size:24px}.guide small{display:none}}
 </style></head>
 <body><main id="app"><div class="top"><div class="brand">🐍 <em>贪吃蛇</em> <span style="font-size:11px;font-weight:400">PARTY CLASH</span></div><span class="beta">霓虹版 · 独立试玩</span></div><div class="desc">60秒竞技 · 霓虹光点 +10分 · 撞击后2秒重生</div><div class="hud"><div class="stat"><small>⏱ 剩余时间</small><b id="time">60.0s</b></div><div class="stat"><small>⭐ 我的积分</small><b id="score">0</b></div><div class="stat"><small>🏆 当前排名</small><b id="rank">1 / 4</b></div></div><div id="leaders" class="scoreboard"></div><div class="board-box"><div class="board-wrap"><canvas id="board"></canvas><div class="overlay" id="overlay"><div class="modal" id="modal"><div class="mascot">🐍</div><h1>贪吃蛇大乱斗</h1><p>60 秒同图混战！拖动右下角摇杆改变方向，吃到豆子加 10 分。撞墙、撞到自己或其他蛇会死亡，<b>2 秒后自动重生</b>，分数保留（每次死亡扣 10 分）。</p><button class="action" id="start">▶ 开始试玩</button><small>当前为单人操控 + 3 条电脑蛇。多人联机版待你确认玩法后再加入首页。</small></div></div></div></div><div id="status" class="status">移动摇杆改变方向，收集发光豆豆</div><div class="controls"><div class="guide"><b>🎮 四方向按键</b><div>轻触方向键控制转向</div><div>吃豆变长 · 避免撞击</div><small>电脑也可以用方向键 / WASD</small><div style="margin-top:12px"><button id="restart" class="tiny-btn">↻ 重新开始</button></div></div><div class="dpad" role="group" aria-label="贪吃蛇方向控制"><button type="button" class="dir-btn dir-up" data-dir="up" aria-label="向上">▲</button><button type="button" class="dir-btn dir-left" data-dir="left" aria-label="向左">◀</button><span class="dir-center" aria-hidden="true">✦</span><button type="button" class="dir-btn dir-right" data-dir="right" aria-label="向右">▶</button><button type="button" class="dir-btn dir-down" data-dir="down" aria-label="向下">▼</button></div></div><div class="foot"><span>霓虹UI预览 · 3条电脑蛇模拟对战</span><a href="/">返回大厅</a></div></main>
 <script>
