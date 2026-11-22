@@ -87,3 +87,17 @@ body{background:radial-gradient(ellipse at 50% -180px,#4a2c3e99 0,transparent 51
 @media(min-width:650px){.home-hero-copy{padding:32px 28px 0}.home-hero-art{height:175px}.character-main{right:75px;font-size:116px}.character-left{right:198px}.character-right{right:12px}.home-hero h1{max-width:360px}}
 @media(max-width:365px){.hero-foot span{font-size:9px}.home-hero-copy{padding:20px 16px 0}.home-hero h1{font-size:34px}.feature-game{padding:10px}.feature-illustration{font-size:39px}.home-main-actions .btn{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.art-character{animation:none}}
+
+/* 单人热身游戏选择页 */
+.solo-hero{padding:26px 20px 24px;border:1px solid #79526a;border-radius:24px;background:radial-gradient(circle at 88% 7%,#6c3a58,#372737 55%,#211c27 100%)}
+.solo-hero h1{font-size:clamp(32px,8vw,43px);line-height:1.2;letter-spacing:-1px;margin:18px 0 10px}
+.solo-hero h1 span{display:block;color:#f8bbd0}
+.solo-hero p{font-size:13px;color:#e0ced9;line-height:1.7;margin:0 0 17px}
+.solo-count{display:inline-block;background:#f8bbd022;border:1px solid #f8bbd057;color:#ffe0eb;padding:9px 11px;border-radius:12px;font-size:11px;font-weight:800}
+.solo-games-panel{margin-top:18px}
+.solo-race-link{width:100%;display:flex;align-items:center;gap:11px;text-align:left;position:relative;background:linear-gradient(110deg,#433042,#322b41);border:1px solid #765466;color:white;padding:15px;border-radius:17px;margin-top:13px}
+.solo-race-emoji{font-size:32px;flex:none}
+.solo-race-link strong{display:block;font-size:14px}
+.solo-race-link small{display:block;font-size:11px;color:#c9bacb;margin-top:6px}
+.solo-race-link .game-chevron{top:15px}
+.solo-return{margin-top:17px}
