@@ -1,7 +1,7 @@
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
 const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
 const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase}=require('./roomStore');
-const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race','snake'];
+const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race'];
 const RACE_ANIMALS=['🐰','🦊','🐻','🐼','🐸','🐯','🦁','🐵','🐷','🐨'];
 
 // 跑得快：服务器权威计时、障碍、星星与移动状态（仅测试玩法）
