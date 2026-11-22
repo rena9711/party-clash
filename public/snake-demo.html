@@ -51,7 +51,7 @@ html,body{background:#070b15}
 <script>
 (()=>{
 'use strict';
-const W=24,H=32,ROUND=60,STEP=.15,FOODS=19;
+const W=24,H=32,ROUND=60,STEP=.20,FOODS=19;
 const q=id=>document.getElementById(id),canvas=q('board'),ctx=canvas.getContext('2d');
 const colors=['#ff77ca','#ffd34c','#39d9ed','#74f96d'],names=['你','黄蛇','绿蛇','紫蛇'];
 let snakes=[],foods=[],running=false,last=0,elapsed=0,acc=0,raf=0,message='',messageUntil=0,seed=0;
