@@ -25,7 +25,7 @@
 @media(max-height:440px){.power-status{top:48px;font-size:10px}.power-status .power-tag{padding:3px 8px}}
 </style></head><body><main id="game"><canvas id="board" aria-label="贪吃蛇游戏区域"></canvas>
 <div id="hud"><div class="title">🐍 <b>贪吃蛇</b><small>360°摇杆 · 横屏试玩版</small></div><div class="stats"><div class="stat"><small>剩余时间</small><strong id="time">60.0s</strong></div><div class="stat"><small>我的积分</small><strong id="score">0</strong></div><div class="stat"><small>当前排名</small><strong id="rank">1/4</strong></div></div></div>
-<div id="leader"></div><div id="power-status" class="power-status" aria-live="polite"></div><div id="stick" aria-label="360度虚拟摇杆"><span class="stick-cross">✧</span><span id="knob" class="knob">●</span></div><div id="right"><button id="reset" class="round-btn">↻ 重开</button><button id="go-full" class="round-btn">⛶ 全屏</button></div><div id="hint">右手360°摇杆 · ⭐普通豆 +10 · ✨双倍蛇长3秒 · 🛡️无敌3秒</div>
+<div id="leader"></div><div id="power-status" class="power-status" aria-live="polite"></div><div id="stick" aria-label="360度虚拟摇杆"><span class="stick-cross">✧</span><span id="knob" class="knob">●</span></div><div id="right"><button id="reset" class="round-btn">↻ 重开</button><button id="go-full" class="round-btn">⛶ 全屏</button></div><div id="hint">右手360°摇杆 · ⭐普通豆 +10 · ✨闪光×2双倍蛇长 · 🛡️闪光护盾无敌</div>
 <div id="overlay"><div class="modal" id="modal"><div class="mascot">🐍✨</div><h1>贪吃蛇 · 横屏对战</h1><p>右手拖动 <b>360° 摇杆</b>，蛇会平滑转弯，不再局限上下左右。速度稍微加快10%，吃金色「×2」豆可获得3秒双倍蛇长，吃蓝色「盾」豆可获得3秒无敌。碰撞后2秒重生，60秒同地图挑战3条电脑蛇。</p><button class="action" id="start">▶ 开始试玩</button><small>独立测试版 · 暂不加入正式大厅</small></div></div>
 <div id="full-help" class="full-help" role="dialog" aria-label="沉浸全屏提示" hidden><div class="full-help-card"><b>📱 iPhone 沉浸全屏</b><p>当前 Safari 不支持网页直接隐藏顶部地址栏和标签栏。你可以点击 Safari 的「分享」→「添加到主屏幕」，再从主屏幕图标打开试玩版，就能用接近 App 的独立窗口显示。</p><button id="close-help" class="round-btn">知道了</button></div></div><div id="rotate"><div><div class="rotate-icon">📱↻</div><div class="rotate-title">请横向握住手机</div><div class="rotate-desc">这个版本为横屏设计<br>转动手机并关闭竖屏锁定即可试玩</div><button id="fullscreen" class="action">尝试全屏横屏</button></div></div>
 </main>
@@ -81,7 +81,19 @@ ctx.setTransform(scale,0,0,scale,offsetX,offsetY);
 const bg=ctx.createLinearGradient(0,0,W,H);bg.addColorStop(0,'#101729');bg.addColorStop(.7,'#09101e');bg.addColorStop(1,'#160e24');ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
 ctx.strokeStyle='#24456a37';ctx.lineWidth=.11;for(let y=0;y<H+3;y+=3.8){for(let x=0;x<W+4;x+=7.8){const ox=x+((Math.round(y/3.8)%2)*3.9);ctx.beginPath();for(let i=0;i<6;i++){const a=i*Math.PI/3,px=ox+2.5*Math.cos(a),py=y+2.5*Math.sin(a);if(!i)ctx.moveTo(px,py);else ctx.lineTo(px,py)}ctx.closePath();ctx.stroke()}}
 for(const f of foods){ctx.save();ctx.fillStyle=f.color;ctx.globalAlpha=.13;ctx.beginPath();ctx.arc(f.x,f.y,f.r*2.5,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.27;ctx.beginPath();ctx.arc(f.x,f.y,f.r*1.7,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffffffb9';ctx.beginPath();ctx.arc(f.x-f.r*.27,f.y-f.r*.24,f.r*.24,0,Math.PI*2);ctx.fill();
-if(f.type!=='normal'){ctx.strokeStyle='#fff';ctx.lineWidth=.13;ctx.globalAlpha=.85;ctx.beginPath();ctx.arc(f.x,f.y,f.r*1.14,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;ctx.fillStyle='#152039';ctx.font='bold 1.0px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(f.type==='length'?'×2':'盾',f.x,f.y+.02);}
+if(f.type!=='normal'){
+// Distinct non-strobing beacon: an expanding halo and four orbiting glints.
+// Runs at ~1 pulse per second to catch attention without rapid flashing.
+const wave=(Math.sin(elapsed*Math.PI*2*0.9+(f.x+f.y)*.03)+1)/2;
+const pulseRadius=f.r*(1.55+wave*.95);
+ctx.save();ctx.globalAlpha=.16+wave*.40;ctx.strokeStyle=f.color;ctx.lineWidth=.22+wave*.20;
+ctx.beginPath();ctx.arc(f.x,f.y,pulseRadius,0,Math.PI*2);ctx.stroke();
+ctx.globalAlpha=.12+wave*.27;ctx.lineWidth=.14;ctx.beginPath();ctx.arc(f.x,f.y,f.r*(2.7+wave*.8),0,Math.PI*2);ctx.stroke();
+for(let k=0;k<4;k++){const angle=k*Math.PI/2+elapsed*.55,orbit=f.r*(1.9+wave*.25);ctx.fillStyle='#fffce5';ctx.globalAlpha=.55+wave*.40;ctx.beginPath();ctx.arc(f.x+Math.cos(angle)*orbit,f.y+Math.sin(angle)*orbit,.15+wave*.08,0,Math.PI*2);ctx.fill()}
+ctx.restore();
+ctx.strokeStyle='#fff';ctx.lineWidth=.13;ctx.globalAlpha=.85;ctx.beginPath();ctx.arc(f.x,f.y,f.r*1.14,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+ctx.fillStyle='#152039';ctx.font='bold 1.05px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(f.type==='length'?'×2':'盾',f.x,f.y+.02);
+}
 ctx.restore()}
 for(const s of snakes){if(!s.trail.length)continue;ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=s.color;
 ctx.globalAlpha=.18;ctx.lineWidth=3.6;ctx.beginPath();for(let i=s.trail.length-1;i>=0;i--){const p=s.trail[i];if(i===s.trail.length-1)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y)}ctx.stroke();
