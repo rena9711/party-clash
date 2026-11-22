@@ -1,7 +1,7 @@
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
 const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
 const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase}=require('./roomStore');
-const rooms=new Map(),GAMES=['tap','precision','snake','dodge','reaction','memory','rps','bomb','mine','race'];
+const rooms=new Map(),GAMES=['tap','precision','reaction','memory','dodge','rps','bomb','mine','race'];
 const RACE_ANIMALS=['🐰','🦊','🐻','🐼','🐸','🐯','🦁','🐵','🐷','🐨'];
 function makeRace(r){const participants=[...r.players.values()].filter(p=>p.online!==false);const order=participants.map(p=>p.id);for(let i=order.length-1;i>0;i--){const j=rand(i+1);[order[i],order[j]]=[order[j],order[i]]}return {runners:participants.map((p,i)=>({id:p.id,name:p.name,animal:RACE_ANIMALS.includes(p.animal)?p.animal:RACE_ANIMALS[i%RACE_ANIMALS.length],rank:order.indexOf(p.id)+1,lane:i})),duration:18000}}
 
