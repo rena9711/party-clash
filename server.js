@@ -1,5 +1,5 @@
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
-const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.static('public'));
+const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
 const rooms=new Map(),GAMES=['tap','precision','reaction','memory','dodge','rps','bomb','mine'];
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
@@ -17,4 +17,25 @@ s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||Date.n
 s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 啟動防護盾`)}else if(t.shield){t.shield=false;s.emit('notice','對方護盾擋住了攻擊');r.log.push(`${t.name} 擋住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 對 ${t.name} 使用 ${card}`)}emit(r)});
 s.on('disconnect',()=>{const r=get(s);if(!r)return;r.players.delete(s.id);if(!r.players.size){clearTimeout(r.timer);rooms.delete(r.code);return}if(r.host===s.id)r.host=r.players.keys().next().value;if(r.phase==='playing'&&[...r.players.values()].every(p=>p.submitted))finish(r);else emit(r)})
 });
+
+// V0.6 prototype social API. No authentication: test data only; NOT secure for production/ranked use.
+const fs=require('fs'),path=require('path');
+const DATA=process.env.DATA_DIR||path.join(__dirname,'data');fs.mkdirSync(DATA,{recursive:true});
+const DBFILE=path.join(DATA,'demo.json');let db={players:{},scores:[],challenges:[],matches:[]};
+try{db={...db,...JSON.parse(fs.readFileSync(DBFILE,'utf8'))}}catch{}
+function persist(){const tmp=DBFILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(db));fs.renameSync(tmp,DBFILE)}
+function sid(v){return typeof v==='string'&&/^[a-f0-9-]{12,80}$/i.test(v)}
+function gameId(g){return ['tap','precision','reaction','memory','dodge','rps','bomb','mine'].includes(g)}
+function player(id){return db.players[id]}
+function display(id){return player(id)?.name||'玩家'}
+function weekStart(t){const d=new Date(t),day=(d.getUTCDay()+6)%7;return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-day)-8*3600000+(d.getUTCHours()<8? -7*86400000:0)}
+app.post('/api/profile',(req,res)=>{let id=req.body?.id,name=clean(req.body?.name||'玩家');if(!sid(id))return res.status(400).json({error:'无效玩家标识'});db.players[id]={name,updated:Date.now()};persist();res.json({id,name})});
+app.get('/api/leaderboard',(req,res)=>{const game=String(req.query.game||'all'),weekly=req.query.period==='week';const cutoff=Date.now()-7*86400000;const scores=db.scores.filter(x=>(game==='all'||x.game===game)&&(!weekly||x.at>=cutoff));const best=new Map();for(const x of scores){const prev=best.get(x.id);if(!prev||x.score>prev.score)best.set(x.id,x)}res.json([...best.values()].sort((a,b)=>b.score-a.score).slice(0,50).map((x,i)=>({rank:i+1,name:display(x.id),score:x.score,id:x.id}))) });
+app.post('/api/score',(req,res)=>{const {id,game}=req.body||{},score=Number(req.body?.score);if(!sid(id)||!player(id)||!gameId(game)||!Number.isInteger(score)||score<0||score>100)return res.status(400).json({error:'成绩格式错误'});const item={id,game,score,at:Date.now(),key:crypto.randomUUID()};db.scores.push(item);db.scores=db.scores.slice(-10000);persist();res.json({ok:true,key:item.key})});
+app.post('/api/challenge',(req,res)=>{const {id,game}=req.body||{},score=Number(req.body?.score);if(!sid(id)||!player(id)||!gameId(game)||!Number.isInteger(score)||score<0||score>100)return res.status(400).json({error:'挑战数据错误'});const c={id:crypto.randomBytes(6).toString('hex'),owner:id,game,score,created:Date.now(),expires:Date.now()+48*3600000,entries:[]};db.challenges.push(c);db.challenges=db.challenges.slice(-1000);persist();res.json({id:c.id,expires:c.expires})});
+app.get('/api/challenge/:id',(req,res)=>{const c=db.challenges.find(x=>x.id===req.params.id);if(!c)return res.status(404).json({error:'挑战不存在'});res.json({id:c.id,ownerName:display(c.owner),game:c.game,score:c.score,expires:c.expires,entries:c.entries.map(x=>({name:display(x.id),score:x.score,at:x.at}))})});
+app.post('/api/challenge/:id/submit',(req,res)=>{const c=db.challenges.find(x=>x.id===req.params.id),id=req.body?.id,score=Number(req.body?.score);if(!c||c.expires<Date.now())return res.status(404).json({error:'挑战已过期或不存在'});if(!sid(id)||!player(id)||id===c.owner||c.entries.some(x=>x.id===id)||!Number.isInteger(score)||score<0||score>100)return res.status(400).json({error:'提交不符合规则'});c.entries.push({id,score,at:Date.now()});db.matches.push({a:c.owner,b:id,game:c.game,aScore:c.score,bScore:score,at:Date.now()});persist();res.json({ok:true,won:score>c.score,tie:score===c.score})});
+app.get('/api/rivals/:id',(req,res)=>{const id=req.params.id;if(!sid(id))return res.status(400).json({error:'无效玩家'});const rivals=new Map();for(const m of db.matches){if(m.a!==id&&m.b!==id)continue;const other=m.a===id?m.b:m.a;const x=rivals.get(other)||{id:other,wins:0,losses:0,draws:0,last:0};const a=m.a===id?m.aScore:m.bScore,b=m.a===id?m.bScore:m.aScore;if(a>b)x.wins++;else if(a<b)x.losses++;else x.draws++;x.last=m.at;rivals.set(other,x)}res.json([...rivals.values()].sort((a,b)=>b.last-a.last).map(x=>({...x,name:display(x.id)})))});
+app.get('/api/health',(req,res)=>res.json({ok:true,version:'0.6'}));
+
 const PORT=process.env.PORT||3000;server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT));
