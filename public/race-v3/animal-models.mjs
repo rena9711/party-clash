@@ -15,30 +15,52 @@ const profiles = {
 
 export function createAnimalFactory({batchedScene}={}) {
   const shapes={
-    ball:new T.SphereGeometry(1,10,7), lowBall:new T.SphereGeometry(1,6,4), cube:new T.BoxGeometry(1,1,1),
-    cone:new T.ConeGeometry(1,1,4), ring:new T.RingGeometry(.72,1,28)
+    ball:new T.SphereGeometry(1,12,8),
+    oval:new T.SphereGeometry(1,8,4),
+    lowBall:new T.SphereGeometry(1,6,3),
+    ear:new T.SphereGeometry(1,8,5),
+    smile:new T.TubeGeometry(new T.QuadraticBezierCurve3(
+      new T.Vector3(-1,.2,.25),new T.Vector3(0,-.95,-.25),new T.Vector3(1,.2,.25)
+    ),8,.095,4,false),
+    shadow:new T.CircleGeometry(1,16), ring:new T.RingGeometry(.72,1,28)
   };
+  const ear=shapes.ear.attributes.position;
+  for(let i=0;i<ear.count;i++){
+    const taper=.74-.28*ear.getY(i);
+    ear.setX(i,ear.getX(i)*taper);
+    ear.setZ(i,ear.getZ(i)*taper);
+  }
+  shapes.ear.computeVertexNormals();
+  const skin=new T.MeshStandardMaterial({roughness:.66});
+  const ground=new T.MeshBasicMaterial();
+  const halo=new T.MeshBasicMaterial({transparent:true,opacity:.87,side:T.DoubleSide});
+  const baseMaterial = shape => shape==='ring'?halo:shape==='shadow'?ground:skin;
+  const colors=new Map();
   const materials=new Map();
   const batches=new Map();
   const nodes=[];
+  const parents=new Set();
   function mesh(parent, shape, color, x,y,z,sx,sy,sz) {
-    const key=shape+'/'+color;
-    if(!materials.has(key))materials.set(key,shape==='ring'
-      ?new T.MeshBasicMaterial({color,transparent:true,opacity:.87,side:T.DoubleSide})
-      :new T.MeshStandardMaterial({color,roughness:.78,flatShading:true}));
     let item;
     if(batchedScene){
-      if(!batches.has(key)){
-        const batch=new T.InstancedMesh(shapes[shape],materials.get(key),128);
+      if(!batches.has(shape)){
+        const batch=new T.InstancedMesh(shapes[shape],baseMaterial(shape),512);
         batch.count=0;
         batch.instanceMatrix.setUsage(T.DynamicDrawUsage);
         batch.frustumCulled=false;
         batchedScene.add(batch);
-        batches.set(key,batch);
+        batches.set(shape,{batch,instanceColors:[]});
       }
+      if(!colors.has(color))colors.set(color,new T.Color(color));
       item=new T.Object3D();
-      nodes.push({item,batch:batches.get(key)});
+      nodes.push({item,group:batches.get(shape),color:colors.get(color)});
     }else{
+      const key=shape+'/'+color;
+      if(!materials.has(key)){
+        const material=baseMaterial(shape).clone();
+        material.color.set(color);
+        materials.set(key,material);
+      }
       item=new T.Mesh(shapes[shape],materials.get(key));
     }
     item.position.set(x,y,z);
@@ -47,104 +69,112 @@ export function createAnimalFactory({batchedScene}={}) {
     return item;
   }
   function create(parent, requested, {self=false}={}) {
-    const id=profiles[requested]?requested:'fox';
+    if(batchedScene)parents.add(parent);
+    const id=Object.hasOwn(profiles,requested)?requested:'fox';
     const {coat,fur,trim,body:bodySize,head:headSize}=profiles[id];
     const root=new T.Group();
     parent.add(root);
-    const shadow=mesh(parent,'ball','#100b22',0,.018,0,.58,.012,.34);
+    const shadow=mesh(parent,'shadow','#100b22',0,.018,0,.58,.34,1);
+    shadow.rotation.x=-Math.PI/2;
     const ring=self?mesh(parent,'ring','#5afaff',0,.035,0,.63,.49,1):null;
     if(ring)ring.rotation.x=-Math.PI/2;
-    const body=mesh(root,'ball',coat,0,.87,0,...bodySize);
-    mesh(root,'cube',trim,0,.79,-bodySize[2],.23,.075,.025);
-    for(const side of [-1,1])mesh(root,'cube','#fff0ed',side*.07,1.02,-bodySize[2],.018,.17,.023).rotation.z=side*.14;
+    const body=mesh(root,'ball',coat,0,.81,0,...bodySize);
+    mesh(root,'oval',coat,0,1.22,.05,.31,.19,.26);
+    mesh(root,'oval','#f8dfef',0,.79,-bodySize[2]*.88,.16,.125,.04);
     const head=new T.Group();
-    head.position.set(0,1.39,-.13);
+    head.position.set(0,1.51,-.10);
     root.add(head);
-    mesh(head,'ball',coat,0,.01,.11,headSize[0]*1.05,headSize[1]*1.07,headSize[2]*1.1);
-    mesh(head,'ball',fur,0,.11,-.12,...headSize);
-    const point=(shape,color,x,y,z,sx,sy,sz)=>mesh(head,shape,color,x,y,z,sx,sy,sz);
-    if(id==='lion'){
-      point('ball','#9e552d',0,.08,.0,.58,.51,.28);
-      for(let i=0;i<10;i++){
-        const angle=i*Math.PI/5;
-        const tuft=point('cone','#bc6e2e',Math.cos(angle)*.47,.08+Math.sin(angle)*.41,-.08,.105,.27,.12);
-        tuft.rotation.z=angle-Math.PI/2;
-      }
-      point('ball',fur,0,.11,-.17,...headSize);
-    }
+    const face=new T.Group();
+    head.add(face);
+    const [hx,hy,hz]=headSize;
+    const headWidth=hx*1.14, headHeight=hy*1.2, headDepth=hz*1.17;
+    const dot=(color,x,y,z,sx,sy,sz)=>mesh(head,'oval',color,x,y,z,sx,sy,sz);
+    const facial=(color,x,y,z,sx,sy,sz)=>mesh(face,'oval',color,x,y,z,sx,sy,sz);
+    const mouth=(color,y,z,width,height)=>mesh(face,'smile',color,0,y,z,width,height,.07);
+    if(id==='lion')mesh(head,'ball','#b56c36',0,.03,.09,.61,.52,.30);
+    mesh(head,'ball',fur,0,0,0,headWidth,headHeight,headDepth);
+    if(id==='penguin')facial(trim,0,-.04,-.264,.37,.30,.137);
+    if(id==='frog')facial(trim,0,-.13,-.248,.43,.16,.161);
+
     for(const side of [-1,1]){
-      const x=side*.28;
-      if(id==='fox'||id==='cat'||id==='pig'){
-        const ear=point('cone',id==='fox'?'#c94d32':fur,x,.48,-.14,.17,id==='fox' ? .43:.30,.13);
-        ear.rotation.z=-side*.27;
-        point('cone',trim,x,.48,-.23,.085,.21,.055).rotation.z=ear.rotation.z;
+      if(['fox','cat','pig'].includes(id)){
+        const x=side*(id==='pig'?.34:.29);
+        const outer=mesh(head,'ear',id==='fox'?'#db6740':fur,x,.33,.015,.24,id==='fox'?.31:.25,.16);
+        outer.rotation.z=-side*.30;
+        const inner=mesh(head,'ear',id==='cat'?'#f4a192':trim,x,.355,-.066,.14,.16,.085);
+        inner.rotation.z=outer.rotation.z;
       }else if(id==='rabbit'){
-        point('ball',fur,x,.59,-.10,.115,.34,.08).rotation.z=-side*.17;
-        point('ball',trim,x,.62,-.158,.065,.247,.034).rotation.z=-side*.17;
+        dot(fur,side*.25,.48,.01,.14,.36,.115).rotation.z=-side*.17;
+        dot(trim,side*.255,.50,-.072,.085,.275,.05).rotation.z=-side*.17;
       }else if(id==='dog'){
-        point('ball','#95623f',side*.39,.17,-.10,.117,.285,.105).rotation.z=side*.25;
+        dot('#a06b53',side*.44,.04,.012,.15,.28,.15).rotation.z=side*.27;
       }else if(id==='frog'){
-        point('ball',fur,side*.27,.33,-.18,.16,.18,.145);
+        dot(fur,side*.29,.246,-.073,.199,.212,.198);
       }else if(id!=='penguin'){
-        point('ball',id==='panda'?trim:fur,x,.39,-.10,.14,.14,.105);
-        if(id!=='panda')point('ball',trim,x,.40,-.178,.082,.080,.045);
+        dot(id==='panda'?trim:fur,side*.34,.295,.035,.16,.16,.13);
+        if(id!=='panda')dot(trim,side*.345,.303,-.066,.095,.09,.045);
       }
-      if(id==='panda')point('ball',trim,side*.19,.15,-.38,.136,.114,.045).rotation.z=side*.35;
-      if(id==='penguin')point('ball',trim,side*.15,.095,-.365,.17,.23,.079);
-      if(id==='frog')point('ball','#f7f5cf',side*.27,.35,-.306,.088,.093,.04);
-      const eyeX=id==='frog' ? .27:.16;
-      point('ball','#191628',side*eyeX,id==='frog' ? .354:.155,id==='frog'?-.345:-headSize[2]-.14,.043,.058,.033);
+      const eyeX=id==='frog'?.29:id==='rabbit'?.175:.185;
+      const eyeY=id==='frog'?.29:.062;
+      const eyeZ=id==='frog'?-.247:-headDepth*.91;
+      if(id==='panda')facial(trim,side*.188,.057,eyeZ+.008,.154,.15,.073).rotation.z=-side*.32;
+      facial('#fffaf4',side*eyeX,eyeY,eyeZ-.045,.097,.118,.060);
+      facial('#282032',side*eyeX,eyeY+.003,eyeZ-.092,.065,.087,.027);
+      facial('#fff9f1',side*eyeX-side*.017,eyeY+.035,eyeZ-.116,.022,.024,.011);
+      if(id==='rabbit'||id==='pig'||id==='frog')
+        facial(id==='frog'?'#9ed174':'#e997ab',side*.272,-.105,-headDepth*.89,.078,.043,.027);
     }
-    if (id==='frog') {
-      point('ball',trim,0,-.038,-.359,.34,.091,.09);
-      point('ball','#2a694b',0,-.015,-.442,.22,.021,.015);
-    } else if (id==='penguin') {
-      const beak=point('cone','#ffc947',0,-.03,-.448,.115,.24,.075);
-      beak.rotation.x=-Math.PI/2;
-    } else if(id==='pig'){
-      point('ball',trim,0,-.024,-.445,.205,.119,.112);
-      for(const side of [-1,1])point('ball','#a54b76',side*.078,-.025,-.547,.031,.045,.017);
-    } else {
-      const muzzle=id==='dog' ? .19:id==='bear' ? .17:id==='fox' ? .15:.12;
-      for(const side of [-1,1])point('ball',id==='panda'?fur:trim,side*.125,-.033,-.39,.155,.105,muzzle);
-      point('ball','#292031',0,.009,-.43-muzzle*.62,.079,.051,.05);
-      if(id==='rabbit')for(const side of [-1,1])point('cube','#fff8ed',side*.038,-.129,-.506,.06,.095,.04);
-      if(id==='cat')for(const side of [-1,1])for(let n=0;n<2;n++){
-        point('cube','#74443d',side*.33,-.034+n*.05,-.445,.19,.012,.018).rotation.z=side*(.15-n*.22);
-      }
+
+    if(id==='frog'){
+      mouth('#316341',-.134,-.422,.229,.125);
+    }else if(id==='penguin'){
+      facial('#f6b859',0,-.11,-.412,.116,.057,.094);
+    }else if(id==='pig'){
+      facial('#eb7da8',0,-.098,-headDepth,.181,.121,.103);
+      for(const side of [-1,1])facial('#a94f74',side*.069,-.094,-headDepth-.093,.029,.038,.015);
+      mouth('#9f4769',-.248,-headDepth+.033,.132,.100);
+    }else{
+      const muzzleColor=id==='panda'?fur:id==='rabbit'?'#f4eaf6':trim;
+      const muzzleDepth=id==='dog'?.14:.082;
+      for(const side of [-1,1])facial(muzzleColor,side*.102,-.11,-headDepth*.9,.16,.109,muzzleDepth);
+      facial(id==='rabbit'?'#be7298':'#4b3039',0,-.078,-headDepth*.90-muzzleDepth,.059,.041,.033);
+      mouth('#804b61',-.157,-headDepth*.90-muzzleDepth-.012,.105,.077);
+      if(id==='cat')for(const side of [-1,1])for(let i=0;i<2;i++)
+        facial('#b3785d',side*.293,-.095-i*.047,-headDepth*.92,.092,.011,.015).rotation.z=side*(.15-i*.29);
     }
     if(['fox','dog','penguin'].includes(id)){
-      point('ball',coat,0,.34,-.16,.33,.12,.27);
-      point('cube',coat,0,.31,-.39,.39,.038,.28);
-    }
-    if(id==='frog'){
-      point('ball','#5bb4e2',-.27,.35,-.349,.099,.098,.025);
-      point('ball','#5bb4e2',.27,.35,-.349,.099,.098,.025);
-      point('ball','#16253a',-.27,.35,-.375,.047,.06,.017);
-      point('ball','#16253a',.27,.35,-.375,.047,.06,.017);
-      point('cube',coat,0,.366,-.33,.38,.022,.022);
+      dot(coat,0,headHeight*.82,.036,.34,.135,.269);
+      dot(coat,0,headHeight*.73,-.225,.27,.034,.199);
     }
     const tail=new T.Group();
-    tail.position.set(0,.80,.18);
+    tail.position.set(0,.67,.188);
     root.add(tail);
-    const long=['fox','cat','lion'].includes(id);
-    mesh(tail,'ball',fur,0,.18,long ? .32:.23,id==='fox' ? .16:.095,.14,long ? .39:.22).rotation.x=-.50;
-    if(long)mesh(tail,'ball',id==='lion'?'#9e552d':trim,0,.31,.57,.105,.12,.17).rotation.x=-.50;
+    if(id==='fox'){
+      mesh(tail,'ball',fur,0,.18,.30,.145,.17,.30).rotation.x=-.56;
+      mesh(tail,'oval',trim,0,.335,.51,.114,.123,.16).rotation.x=-.56;
+    }else if(id==='cat'||id==='lion'){
+      mesh(tail,'oval',fur,0,.17,.24,.065,.075,.28).rotation.x=-.71;
+      mesh(tail,'oval',id==='lion'?'#a26339':fur,0,.38,.46,.087,.102,.12);
+    }else if(id==='pig'){
+      mesh(tail,'smile','#e984ad',0,.122,.272,.081,.115,.07).rotation.set(0,Math.PI,.62);
+    }else if(id!=='frog'){
+      mesh(tail,'oval',id==='dog'?'#a06b53':fur,0,.12,.193,.112,.112,.135);
+    }
     const legs=[],arms=[];
     for(const side of [-1,1]){
       const leg=new T.Group();
-      leg.position.set(.19*side,.54,0);
+      leg.position.set(.179*side,.47,0);
       root.add(leg);
-      mesh(leg,'cube','#241b36',0,-.22,0,.18,.39,.19);
-      mesh(leg,'cube','#f3e6f4',0,-.46,-.085,.24,.15,.37);
-      mesh(leg,'cube',coat,0,-.52,-.085,.23,.04,.35);
+      mesh(leg,'oval','#3c3049',0,-.155,0,.101,.205,.109);
+      mesh(leg,'oval','#f4e7ec',0,-.337,-.073,.136,.094,.188);
+      mesh(leg,'oval',coat,0,-.388,-.073,.139,.043,.184);
       legs.push(leg);
       const arm=new T.Group();
-      arm.position.set((bodySize[0]-.03)*side,1.08,0);
+      arm.position.set((bodySize[0]-.048)*side,.99,0);
       root.add(arm);
-      mesh(arm,id==='penguin'?'ball':'cube',coat,0,-.18,0,.18,.34,.18);
-      mesh(arm,'ball',fur,0,-.35,0,.087,.10,.093);
-      arm.rotation.z=side*.15;
+      mesh(arm,'oval',coat,0,-.124,0,.109,.241,.111);
+      mesh(arm,'oval',fur,0,-.305,-.014,.095,.108,.095);
+      arm.rotation.z=side*.18;
       arms.push(arm);
     }
     return {
@@ -156,7 +186,9 @@ export function createAnimalFactory({batchedScene}={}) {
         const landing=Math.max(0,1-(run.time-run.landedAt)/.18);
         root.position.set(run.x,run.y+(preview ? .03*Math.sin(time*2):fly?0:Math.abs(Math.sin(phase))*.045),z);
         root.scale.setScalar(scale);
-        shadow.scale.set(.58*scale,.012,.34*scale);
+        // Selection cameras show the face. On the track the chase camera stays behind the runners.
+        face.visible=preview;
+        shadow.scale.set(.58*scale,.34*scale,1);
         root.rotation.set(0,preview?Math.PI+.38:-run.vx*.025,-run.vx*.023+hit*Math.sin(hit*11)*.32);
         body.scale.y=bodySize[1]*(1-landing*.13);
         head.rotation.x=preview ? .04*Math.sin(time*2):fly?-.14:hit*.29;
@@ -171,24 +203,27 @@ export function createAnimalFactory({batchedScene}={}) {
     };
   }
   function createDistant(parent, requested) {
-    const profile=profiles[requested]??profiles.fox;
+    if(batchedScene)parents.add(parent);
+    const id=Object.hasOwn(profiles,requested)?requested:'fox';
+    const profile=profiles[id];
     const root=new T.Group();
     parent.add(root);
     const {coat,fur,trim,body,head}=profile;
     mesh(root,'lowBall',coat,0,.86,0,...body);
-    mesh(root,'lowBall',fur,0,1.49,-.13,...head);
-    if(requested==='lion')mesh(root,'lowBall','#ad622e',0,1.47,.04,.51,.46,.17);
-    if(requested!=='penguin'){
-      const pointed=['fox','cat','pig'].includes(requested);
+    mesh(root,'lowBall',fur,0,1.51,-.1,head[0]*1.14,head[1]*1.2,head[2]*1.17);
+    if(id==='lion')mesh(root,'lowBall','#ad622e',0,1.47,.04,.51,.46,.17);
+    if(id!=='penguin'){
+      const pointed=['fox','cat','pig'].includes(id);
       for(const side of [-1,1]){
-        const rabbit=requested==='rabbit';
-        const frog=requested==='frog';
-        mesh(root,pointed?'cone':'lowBall',requested==='panda'?trim:fur,side*.28,
-          rabbit?1.96:frog?1.73:1.79,-.10,.12,rabbit ? .31 : pointed ? .30:.13,.10);
+        const rabbit=id==='rabbit';
+        const frog=id==='frog';
+        const floppy=id==='dog';
+        mesh(root,pointed?'ear':'lowBall',id==='panda'?trim:floppy?'#a06b53':fur,side*(floppy?.43:.29),
+          rabbit?1.98:frog?1.76:floppy?1.55:1.83,0,.14,rabbit?.34:floppy?.26:pointed?.29:.16,.12);
       }
     }
-    const legs=[-1,1].map(side=>mesh(root,'cube',coat,side*.17,.32,0,.17,.44,.17));
-    const feet=[-1,1].map(side=>mesh(root,'cube','#f3e6f4',side*.17,.09,-.08,.22,.13,.33));
+    const legs=[-1,1].map(side=>mesh(root,'lowBall',coat,side*.17,.32,0,.17,.44,.17));
+    const feet=[-1,1].map(side=>mesh(root,'lowBall','#f3e6f4',side*.17,.09,-.08,.22,.13,.33));
     return {
       hide(){root.visible=false},
       update(run,_time,_preview,z,scale){
@@ -208,16 +243,36 @@ export function createAnimalFactory({batchedScene}={}) {
     create, createDistant,
     flush(){
       if(!batchedScene)return;
-      batchedScene.updateMatrixWorld(true);
-      for(const batch of batches.values())batch.count=0;
-      for(const {item,batch} of nodes){
+      for(const parent of parents)parent.updateWorldMatrix(true,true);
+      for(const group of batches.values()){
+        group.batch.count=0;
+        group.colorDirty=false;
+      }
+      for(const {item,group,color} of nodes){
         let node=item;
         while(node?.visible)node=node.parent;
-        if(!node)batch.setMatrixAt(batch.count++,item.matrixWorld);
+        if(node)continue;
+        const {batch,instanceColors}=group;
+        const index=batch.count++;
+        batch.setMatrixAt(index,item.matrixWorld);
+        if(instanceColors[index]!==color){
+          batch.setColorAt(index,color);
+          instanceColors[index]=color;
+          group.colorDirty=true;
+        }
       }
-      for(const batch of batches.values())if(batch.count)batch.instanceMatrix.needsUpdate=true;
+      for(const {batch,colorDirty} of batches.values())if(batch.count){
+        batch.instanceMatrix.addUpdateRange(0,batch.count*16);
+        batch.instanceMatrix.needsUpdate=true;
+        if(colorDirty){
+          batch.instanceColor.addUpdateRange(0,batch.count*3);
+          batch.instanceColor.needsUpdate=true;
+        }
+      }
     },
     dispose(){
+      for(const {batch} of batches.values())batch.dispose();
+      for(const material of [skin,ground,halo])material.dispose();
       for(const value of Object.values(shapes))value.dispose();
       for(const value of materials.values())value.dispose();
     }
