@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import {createAnimalFactory} from './animal-models.mjs';
 
 export function createScene(canvas) {
   const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
@@ -38,81 +39,18 @@ export function createScene(canvas) {
   }
   const block = (parent, coat, x,y,z,sx,sy,sz) => mesh(parent,box,coat,x,y,z,sx,sy,sz);
 
-  // Animal rigs expose the same update contract for future characters.
-  function createFox() {
-    const root = new T.Group();
-    scene.add(root);
-    const shadow = mesh(scene,sphere,paint.shadow,0,.018,0,.58,.012,.34);
-    const body = mesh(root,sphere,paint.hoodie,0,.89,0,.39,.51,.28);
-    const head = new T.Group();
-    head.position.set(0,1.38,-.13);
-    root.add(head);
-    mesh(head,sphere,paint.hoodLight,0,0,.15,.43,.39,.33);
-    mesh(head,sphere,paint.orange,0,.12,-.16,.42,.34,.31);
-    const snout = mesh(head,cone,paint.cream,0,-.03,-.39,.25,.43,.24);
-    snout.rotation.x = -Math.PI/2;
-    mesh(head,sphere,paint.dark,0,-.015,-.60,.085,.062,.06);
-    for (const side of [-1,1]) {
-      const ear = mesh(head,cone,paint.rust,side*.29,.47,-.16,.19,.45,.14);
-      ear.rotation.z = -side*.22;
-      const inner = mesh(head,cone,paint.cream,side*.29,.48,-.25,.096,.30,.07);
-      inner.rotation.z = ear.rotation.z;
-      mesh(head,sphere,paint.cream,side*.255,.018,-.36,.15,.11,.097);
-      mesh(head,sphere,paint.dark,side*.16,.12,-.435,.045,.065,.028);
-      block(root,paint.cream,side*.083,1.04,-.281,.024,.21,.022).rotation.z=side*.14;
+  const animalFactory = createAnimalFactory({batchedScene:scene});
+  const models = new Map();
+  const point = new T.Vector3();
+  function animal(key, character, self) {
+    const id=key+':'+(character??'fox');
+    if (!models.has(id)) {
+      const isolated = new T.Group();
+      scene.add(isolated);
+      models.set(id, animalFactory.create(isolated,character,{self}));
     }
-    mesh(head,sphere,paint.hoodie,0,.34,-.16,.33,.13,.28);
-    block(head,paint.violet,0,.31,-.39,.39,.038,.28);
-    block(root,paint.hoodLight,0,.83,-.268,.27,.085,.045);
-    const tail = new T.Group();
-    tail.position.set(0,.81,.20);
-    root.add(tail);
-    const tailBase = mesh(tail,sphere,paint.orange,0,.18,.33,.15,.16,.42);
-    tailBase.rotation.x=-.50;
-    const tailTip = mesh(tail,sphere,paint.cream,0,.35,.62,.13,.13,.18);
-    tailTip.rotation.x=-.50;
-    const legs=[], arms=[];
-    for (const side of [-1,1]) {
-      const leg = new T.Group();
-      leg.position.set(.19*side,.57,0);
-      root.add(leg);
-      block(leg,paint.dark,0,-.22,0,.18,.42,.19);
-      block(leg,paint.shoes,0,-.48,-.08,.24,.16,.36);
-      block(leg,paint.violet,0,-.54,-.08,.23,.04,.35);
-      legs.push(leg);
-      const arm = new T.Group();
-      arm.position.set(.36*side,1.14,0);
-      root.add(arm);
-      block(arm,paint.hoodie,0,-.19,0,.18,.38,.18);
-      mesh(arm,sphere,paint.orange,0,-.38,0,.087,.10,.093);
-      arm.rotation.z=side*.13;
-      arms.push(arm);
-    }
-    return {
-      hide() { root.visible=false; shadow.visible=false; },
-      update(run, time, preview, z=0) {
-        shadow.visible=true;
-        const phase = run.distance * 1.18;
-        const airborne = run.y > 0;
-        const impact = run.hit ? Math.max(0,1-(run.time-run.hit.time)/.42) : 0;
-        const landing = Math.max(0,1-(run.time-run.landedAt)/.18);
-        root.position.set(run.x,run.y + (preview ? .035*Math.sin(time*2):airborne?0:Math.abs(Math.sin(phase))*.045),z);
-        root.rotation.set(0,preview ? Math.PI+.48+Math.sin(time)*.09 : -run.vx*.025, -run.vx*.023 + impact*Math.sin(impact*11)*.32);
-        body.scale.y=.51*(1-landing*.13);
-        head.rotation.x=preview ? .05*Math.sin(time*2) : airborne ? -.14 : impact*.29;
-        tail.rotation.y=Math.sin(preview?time*2:phase*.55)*.26;
-        legs.forEach((leg,i)=>{leg.rotation.x=preview ? 0 : airborne ? (i===0? -.65:.43) : Math.sin(phase+i*Math.PI)*.77;});
-        arms.forEach((arm,i)=>{arm.rotation.x=preview ? .04*Math.sin(time*2+i):airborne?-.45:Math.sin(phase+(i+1)*Math.PI)*.53;});
-        if (run.time < run.protectedUntil && !preview) {
-          root.visible=impact>0 || Math.floor(run.time*11)%2===0;
-        } else root.visible=true;
-        shadow.position.set(run.x,.018,z);
-        shadow.scale.x=.58-run.y*.13;
-      }
-    };
+    return models.get(id);
   }
-  const fox = createFox();
-  const rivals = [];
 
   block(scene,paint.road,0,-.11,-36,8.1,.18,92);
   block(scene,paint.wall,-12,-.18,-38,15,.16,96);
@@ -226,26 +164,39 @@ export function createScene(canvas) {
   function render(run,time,preview,others=[]) {
     city(run.distance);
     objects(run,time);
-    fox.update(run,time,preview);
-    let visible = 0;
+    for (const model of models.values()) model.hide();
+    animal('self',run.character,true).update(run,time,preview);
+    const visible=[];
     for (const runner of others) {
       const z=run.distance-runner.distance;
       if (z < -40 || z > 6) continue;
-      const rival = rivals[visible] ?? (rivals[visible] = createFox());
-      visible++;
-      rival.update(runner,time,false,z);
+      animal(runner.slot,runner.character,false).update(runner,time,false,z);
+      visible.push({runner,z,self:false});
     }
-    for (let index=visible; index<rivals.length; index++) rivals[index].hide();
     const wide=camera.aspect>1.45;
     if(preview){
       camera.position.set(wide?3.35:2.65,wide?2.3:2.25,5.65);
       camera.lookAt(wide?1.3:0,wide?1.02:.35,0);
     } else {
       const shake=run.hit?Math.max(0,.24-(run.time-run.hit.time))*.23*Math.sin(time*78):0;
-      camera.position.set(run.x*.53+shake,wide?3.5:3.55,wide?6.85:7.75);
-      camera.lookAt(run.x*.31,1.05,-8.3);
+      if (run.id && !wide) {
+        // Keep the full starting row in view on narrow phone screens.
+        const depth=4.45/(Math.tan(camera.fov*Math.PI/360)*camera.aspect);
+        camera.position.set(run.x*.10+shake,4.9,Math.max(8,depth));
+        camera.lookAt(run.x*.08,1.05,-5.5);
+      } else {
+        camera.position.set(run.x*.53+shake,wide?3.5:3.55,wide?6.85:7.75);
+        camera.lookAt(run.x*.31,1.05,-8.3);
+      }
     }
+    animalFactory.flush();
     renderer.render(scene,camera);
+    if (preview||!run.id) return [];
+    return [{runner:run,z:0,self:true},...visible].flatMap(({runner,z,self})=>{
+      point.set(runner.x,runner.y+2.40,z).project(camera);
+      if(point.z < -1||point.z > 1||Math.abs(point.x)>1||Math.abs(point.y)>1)return [];
+      return [{id:runner.id,name:runner.name,x:(point.x+1)/2,y:(1-point.y)/2,self}];
+    });
   }
   function dispose() {
     const geometries=new Set(), materials=new Set();

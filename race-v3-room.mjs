@@ -6,10 +6,10 @@ export function createRace(players, seed, startsAt) {
   const track = createTrack(seed);
   return {
     seed, startsAt, endsAt: startsAt + DURATION * 1000, tick: 0,
-    runners: players.map(({id, name}, slot) => {
+    runners: players.map(({id, name, character}, slot) => {
       const run = createRun(undefined, track);
       run.x = (slot - (players.length - 1) / 2) * .65;
-      return {id, name, slot, run, axis: 0, lastInput: -Infinity, jump: false, boost: false};
+      return {id, name, character, slot, run, axis: 0, lastInput: -Infinity, jump: false, boost: false};
     })
   };
 }
@@ -56,8 +56,8 @@ export function standings(race) {
 }
 
 export function snapshotRace(race, id, now) {
-  const runners = standings(race).map(({id: playerId, name, slot, run}, index) => ({
-    id: playerId, name, slot, rank: index + 1, x: run.x, y: run.y, vx: run.vx, distance: run.distance,
+  const runners = standings(race).map(({id: playerId, name, character, slot, run}, index) => ({
+    id: playerId, name, character, slot, rank: index + 1, x: run.x, y: run.y, vx: run.vx, distance: run.distance,
     time: run.time, health: run.health, stars: run.stars, done: run.done,
     hit: run.hit, landedAt: run.landedAt, protectedUntil: run.protectedUntil,
     boostUntil: run.boostUntil, boostReadyAt: run.boostReadyAt

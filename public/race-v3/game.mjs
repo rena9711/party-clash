@@ -1,3 +1,4 @@
+import '../player-identity.js';
 import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs';
 
 const get = id => document.getElementById(id);
@@ -6,6 +7,8 @@ const settings = get('sensitivity');
 const multiplayer = new URLSearchParams(location.search).get('mode') === 'room' && window.parent !== window;
 let network, lastSent = -Infinity, roomState, roomHealth, roomStars;
 const roomNotice = get('room-status');
+const nameplates=new Map();
+let leaderboardKey='';
 
 let view;
 let run = createRun();
@@ -37,6 +40,8 @@ function show(next) {
   mode = next;
   for (const panel of ['intro','paused','result','error']) get(panel).hidden = panel !== next;
   get('hud').hidden = next !== 'running';
+  get('room-leaderboard').hidden = !multiplayer || next !== 'running';
+  get('nameplates').hidden = !multiplayer || next !== 'running';
   if (next==='paused'||next==='error') roomNotice.hidden=true;
   updateControls();
 }
@@ -199,6 +204,7 @@ function frame(now) {
     previewTime+=delta;
     if (multiplayer) {
       const clock=network.sample(now,delta);
+      if(clock?.run?.character) run.character=clock.run.character;
       const text=clock?.startsAt>clock?.clock ? '房间倒数 '+Math.ceil((clock.startsAt-clock.clock)/1000)+' 秒' :
         clock?.connected ? '比赛进行中，点击进入' : '等待房间同步…';
       roomNotice.hidden=false;
@@ -233,7 +239,40 @@ function renderRoom(now, delta, direction) {
   get('boost').disabled=cooldown>0 || !state.connected || !state.moving;
   updateHud(Math.max(0,(state.endsAt-Math.max(state.clock,state.startsAt))/1000));
   updateControls();
-  view.render(run,run.time,false,state.others);
+  renderNameplates(view.render(run,run.time,false,state.others));
+  updateLeaderboard(state.runners);
+}
+function updateLeaderboard(runners) {
+  const key=JSON.stringify(runners.map(p=>[p.id,p.rank,p.name,p.character,p.stars]));
+  if(key===leaderboardKey)return;
+  leaderboardKey=key;
+  const list=get('room-leaderboard-list');
+  list.replaceChildren(...runners.map(runner=>{
+    const row=document.createElement('li');
+    const icon=PartyIdentity.animals.find(([id])=>id===runner.character)?.[1]??'';
+    row.textContent=icon+' '+runner.name+' · '+runner.stars*10+' 分';
+    return row;
+  }));
+}
+function renderNameplates(labels) {
+  const visible=new Set();
+  for(const label of labels){
+    visible.add(label.id);
+    let node=nameplates.get(label.id);
+    if(!node){
+      node=document.createElement('span');
+      get('nameplates').append(node);
+      nameplates.set(label.id,node);
+    }
+    node.classList.toggle('self',label.self);
+    node.classList.toggle('left-edge',label.x<.13);
+    node.classList.toggle('right-edge',label.x>.87);
+    const text=(label.self?'我 · ':'')+label.name;
+    if(node.textContent!==text)node.textContent=text;
+    node.style.left=label.x*100+'%';
+    node.style.top=label.y*100+'%';
+  }
+  for(const [id,node] of nameplates)if(!visible.has(id)){node.remove();nameplates.delete(id)}
 }
 function performAction(action) {
   if (mode!=='running') return;

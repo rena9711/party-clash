@@ -46,7 +46,7 @@ export function connectRaceView() {
       const objects = track.filter(item => item.at >= run.distance-6 && item.at < run.distance+76)
         .map(item => taken.has(item.id) ? {...item, used:true, impactTime:taken.get(item.id)} : item);
       return {clock, startsAt:state.startsAt, endsAt:state.endsAt, connected:connectedNow, moving,
-        run:{...run, objects}, others:players.filter(runner => runner.id!==playerId && !runner.done)};
+        run:{...run, objects}, runners:state.runners, others:players.filter(runner => runner.id!==playerId && !runner.done)};
     }
   };
 }

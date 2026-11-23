@@ -1,4 +1,5 @@
 const MemoryTournament = require('./memory-tournament');
+const {animals,validateName}=require('./public/player-identity');
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
 const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
 app.get('/race-v3/vendor/three.module.min.js', (_req, res) => {
@@ -71,7 +72,7 @@ function finishSnake(r){for(const snake of r.snake?.players||[]){const p=r.playe
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
 function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);clearInterval(r.memoryInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
@@ -79,7 +80,7 @@ function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
 function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(100,Number(value)||0));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
 function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=r.game==='race'
  ? RaceV3.standings(r.race).map(runner=>r.players.get(runner.id))
- : [...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,value:p.value,exploded:r.game==='bomb'&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.run.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.run.distance||0):undefined,earned:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]);emit(r)}
+ : [...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,character:r.game==='race'?p.character:undefined,value:p.value,exploded:r.game==='bomb'&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.run.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.run.distance||0):undefined,earned:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]);emit(r)}
 function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=r.game==='bomb'?newBombGame(r):null;r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
   r.race=RaceV3.createRace([...r.players.values()].filter(p=>p.online!==false),r.seed,r.startsAt);
   r.endsAt=r.race.endsAt;
@@ -124,17 +125,115 @@ function startMemory(r) {
   }, 80);
 }
 
+const validSession=value=>typeof value==='string'&&value.length>=12&&value.length<=80?value:'';
 io.on('connection',s=>{
 s.on('memory-clock',ack=>{if(typeof ack==='function')ack(Date.now())});
-s.on('create',async({name,session}={},ack)=>{let c=code();while(rooms.has(c))c=code();const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null};rooms.set(c,r);r.players.set(s.id,{id:s.id,name:clean(name),session:typeof session==='string'?session.slice(0,80):'',score:0,ready:false,online:true});s.join(c);s.data.room=c;try{await saveRoom(r);ack?.({ok:true,code:c,id:s.id});emit(r)}catch(e){rooms.delete(c);s.leave(c);s.data.room=null;ack?.({error:'房间保存失败，请重试'});console.error('Create room persistence:',e.message)}});
-s.on('join',({code:raw,name,session}={},ack)=>{const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);if(!r)return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});let old=null;if(typeof session==='string'&&session.length>=12){for(const p of r.players.values()){if(p.session===session){old=p;break}}}if(!old&&r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'游戏进行中，请稍后加入'});if(!old&&r.players.size>=10)return ack?.({error:'房间已满'});clearTimeout(r.expireTimer);r.expireTimer=null;if(old){r.players.delete(old.id);if(r.host===old.id)r.host=s.id;if(r.race)for(const runner of r.race.runners){if(runner.id===old.id){runner.id=s.id;RaceV3.clearInput(runner)}}if(r.bomb)r.bomb.order=r.bomb.order.map(id=>id===old.id?s.id:id);if(r.snake)for(const p of r.snake.players){if(p.id===old.id){p.id=s.id;if(!p.body.length&&!p.respawnAt)p.respawnAt=Date.now()+500}}
-if(r.memory&&r.phase==='playing')MemoryTournament.rename(r.memory,old.id,s.id);r.players.set(s.id,{...old,id:s.id,name:clean(name),online:true})}else r.players.set(s.id,{id:s.id,name:clean(name),session:typeof session==='string'?session.slice(0,80):'',score:0,ready:false,online:true});s.join(c);s.data.room=c;ack?.({ok:true,code:c,id:s.id});emit(r);
-if(r.phase==='playing'&&r.game==='memory')s.emit('memory-state',MemoryTournament.snapshot(r.memory,Date.now()));
-if(r.phase==='playing'&&r.game==='snake')s.emit('snake-state',snakeSnapshot(r));
-if(r.phase==='playing'&&r.game==='race')s.emit('race-state',RaceV3.snapshotRace(r.race,s.id,Date.now()));
+s.on('create',async(input,ack)=>{
+  const {name,session}=input||{};
+  const identity=validateName(name);
+  if(identity.error)return ack?.(identity);
+  if(get(s))return ack?.({error:'请先离开当前房间'});
+  let c=code();
+  while(rooms.has(c))c=code();
+  const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null};
+  rooms.set(c,r);
+  r.players.set(s.id,{id:s.id,name:identity.name,session:validSession(session),score:0,ready:false,online:true});
+  s.join(c);
+  s.data.room=c;
+  try {
+    await saveRoom(r);
+    ack?.({ok:true,code:c,id:s.id});
+    emit(r);
+  } catch(e) {
+    rooms.delete(c);
+    s.leave(c);
+    s.data.room=null;
+    ack?.({error:'房间保存失败，请重试'});
+    console.error('Create room persistence:',e.message);
+  }
+});
+s.on('join',(input,ack)=>{
+  const {code:raw,name,session,resume}=input||{};
+  const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);
+  if(!r)return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});
+  if(get(s)&&get(s)!==r)return ack?.({error:'请先离开当前房间'});
+  const token=validSession(session);
+  const old=token&&[...r.players.values()].find(player=>player.session===token);
+  if(resume&&!old)return ack?.({error:'未找到原玩家，请确认昵称后加入'});
+  if(get(s)&&!old)return ack?.({error:'请先离开当前房间'});
+  const identity=old?null:validateName(name);
+  if(identity?.error)return ack?.(identity);
+  if(identity && [...r.players.values()].some(p=>p.name===identity.name)) {
+    return ack?.({error:'该昵称已被使用，请换一个名字'});
+  }
+  if(!old&&r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'游戏进行中，请稍后加入'});
+  if(!old&&r.players.size>=10)return ack?.({error:'房间已满'});
+  clearTimeout(r.expireTimer);
+  r.expireTimer=null;
+  if(old) {
+    if(old.id!==s.id){
+      const oldSocket=io.sockets.sockets.get(old.id);
+      if(oldSocket){oldSocket.leave(c);oldSocket.data.room=null}
+      r.players.delete(old.id);
+      if(r.host===old.id)r.host=s.id;
+      if(r.race)for(const runner of r.race.runners)if(runner.id===old.id){runner.id=s.id;RaceV3.clearInput(runner)}
+      if(r.bomb)r.bomb.order=r.bomb.order.map(id=>id===old.id?s.id:id);
+      if(r.snake)for(const player of r.snake.players)if(player.id===old.id){
+        player.id=s.id;
+        if(!player.body.length&&!player.respawnAt)player.respawnAt=Date.now()+500;
+      }
+      if(r.memory&&r.phase==='playing')MemoryTournament.rename(r.memory,old.id,s.id);
+      for(const result of r.results||[])if(result.id===old.id)result.id=s.id;
+    }
+    r.players.set(s.id,{...old,id:s.id,online:true});
+  } else {
+    r.players.set(s.id,{id:s.id,name:identity.name,session:token,score:0,ready:false,online:true});
+  }
+  s.join(c);
+  s.data.room=c;
+  ack?.({ok:true,code:c,id:s.id});
+  emit(r);
+  if(r.phase==='playing'&&r.game==='memory')s.emit('memory-state',MemoryTournament.snapshot(r.memory,Date.now()));
+  if(r.phase==='playing'&&r.game==='snake')s.emit('snake-state',snakeSnapshot(r));
+  if(r.phase==='playing'&&r.game==='race')s.emit('race-state',RaceV3.snapshotRace(r.race,s.id,Date.now()));
+});
+s.on('race-character',(character,ack)=>{
+  const room=get(s),player=room?.players.get(s.id);
+  if(!player||room.phase==='playing'||room.selectedGame!=='race'||!animals.some(([id])=>id===character)){
+    return ack?.({error:'当前不能选择该角色'});
+  }
+  if([...room.players.values()].some(other=>other.id!==s.id&&other.character===character)){
+    return ack?.({error:'该角色已被选择'});
+  }
+  player.character=character;
+  ack?.({ok:true});
+  emit(room);
+});
+s.on('leave-room',ack=>{
+  const room=get(s);
+  if(!room||room.phase==='playing')return ack?.({error:'比赛结束后可退出房间'});
+  room.players.delete(s.id);
+  s.leave(room.code);
+  s.data.room=null;
+  if(!room.players.size){
+    clearTimeout(room.expireTimer);
+    rooms.delete(room.code);
+    removeRoom(room.code).catch(error=>console.error('Room delete failed:',error.message));
+  }else{
+    if(room.host===s.id)room.host=([...room.players.values()].find(player=>player.online!==false)||room.players.values().next().value).id;
+    if(!onlineCount(room))roomExpiry(room);
+    emit(room);
+  }
+  ack?.({ok:true});
 });
 s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&r.phase!=='playing'&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
-s.on('start',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&onlineCount(r)>=2&&r.phase!=='playing')start(r,r.selectedGame||game)});
+s.on('start',({game}={})=>{
+  const r=get(s);
+  if(!r||r.host!==s.id||onlineCount(r)<2||r.phase==='playing')return;
+  const chosen=r.selectedGame||game;
+  if(chosen==='race'&&[...r.players.values()].some(player=>player.online!==false&&!player.character))return;
+  start(r,chosen);
+});
 s.on('bomb-guess',({number}={})=>{const r=get(s);if(r&&typeof number==='number')guessBomb(r,s.id,number)});
 s.on('snake-input',({x,y}={})=>{const r=get(s),p=r?.snake?.players.find(p=>p.id===s.id);if(!r||r.phase!=='playing'||r.game!=='snake'||!p||!p.body.length||Date.now()<r.startsAt)return;if(!Number.isInteger(x)||!Number.isInteger(y)||Math.abs(x)+Math.abs(y)!==1)return;if(x===-p.dir.x&&y===-p.dir.y)return;p.next={x,y}});
 s.on('race-input', input=>{

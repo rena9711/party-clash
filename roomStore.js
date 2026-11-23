@@ -12,10 +12,10 @@ const LIFETIME_MS = 24 * 60 * 60 * 1000;
 function state(room) {
   return {
     code: room.code, host: room.host, phase: room.phase,
-    round: room.round, game: room.game, results: room.results || [],
+    round: room.round, game: room.game, selectedGame: room.selectedGame, results: room.results || [],
     log: room.log || [], createdAt: room.createdAt || Date.now(),
     players: [...room.players.values()].map(p => ({
-      id:p.id, session:p.session || '', name:p.name, score:p.score || 0,
+      id:p.id, session:p.session || '', name:p.name, character:p.character, score:p.score || 0,
       ready: false, submitted: Boolean(p.submitted),
       value: p.value || 0, online: false
     }))

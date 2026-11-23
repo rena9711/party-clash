@@ -63,6 +63,11 @@ async function start(game,players){
   const selected=until(owner.socket,'room',r=>r.selectedGame===game);
   owner.socket.emit('select-game',{game});
   await selected;
+  if(game==='race'){
+    const {animals}=require('../public/player-identity');
+    const all=await Promise.all(players.map((p,index)=>p.socket.timeout(5000).emitWithAck('race-character',animals[index][0])));
+    assert.ok(all.every(result=>result.ok));
+  }
   const started=until(owner.socket,'room',r=>r.phase==='playing'&&r.game===game);
   owner.socket.emit('start',{game});
   await started;
@@ -157,6 +162,41 @@ test('all eight games can be selected and start in two-player rooms', {timeout:2
   }
 });
 
+test('identity validation, atomic character reservation, start gate, and release', {timeout:16000},async()=>{
+  const [a,b,c]=await Promise.all([player('狐狸甲'),player('狐狸乙'),player('第三位')]);
+  const ack=(p,event,data)=>p.socket.timeout(5000).emitWithAck(event,data);
+  assert.equal((await ack(a,'create',{session:a.session})).error,'请输入你的名字');
+  assert.equal((await ack(a,'create',{name:'　 ',session:a.session})).error,'请输入你的名字');
+  assert.equal((await ack(a,'create',{name:'中'.repeat(13),session:a.session})).error,'昵称最多 12 个字符');
+  const {code}=await request(a,'create');
+  assert.equal((await ack(b,'join',{code,session:b.session})).error,'请输入你的名字');
+  assert.equal((await ack(b,'join',{code,session:b.session,name:' 狐狸甲 '})).error,'该昵称已被使用，请换一个名字');
+  await request(b,'join',{code,name:'👨‍👩‍👧‍👦'.repeat(12)});
+  const selected=until(a.socket,'room',r=>r.selectedGame==='race');
+  a.socket.emit('select-game',{game:'race'});
+  await selected;
+  a.socket.emit('start',{game:'race'});
+  const attempts=await Promise.all([ack(a,'race-character','fox'),ack(b,'race-character','fox')]);
+  assert.equal(attempts.filter(r=>r.ok).length,1);
+  assert.equal(attempts.filter(r=>r.error==='该角色已被选择').length,1);
+  const winner=attempts[0].ok?a:b;
+  const loser=winner===a?b:a;
+  const stillLobby=until(loser.socket,'room',r=>r.phase==='lobby');
+  assert.equal((await ack(loser,'race-character','rabbit')).ok,true);
+  await stillLobby;
+  assert.equal((await loser.socket.timeout(5000).emitWithAck('leave-room')).ok,true);
+  await request(c,'join',{code});
+  assert.equal((await ack(c,'race-character','rabbit')).ok,true);
+  winner.socket.disconnect();
+  const again=await player(winner.name,winner.session);
+  const originalName=winner===a?'狐狸甲':'👨‍👩‍👧‍👦'.repeat(12);
+  const reconnected=until(again.socket,'room',r=>r.players.some(p=>p.name===originalName&&p.character==='fox'));
+  await request(again,'join',{code,resume:true,name:'不能覆盖原昵称'});
+  const state=await reconnected;
+  assert.equal(state.players.length,2);
+  assert.equal(state.players.find(p=>p.id===again.id).name,originalName);
+  assert.equal(state.players.find(p=>p.id===c.id).character,'rabbit');
+});
 for (const count of [2,5,10]) {
   test('3D race synchronizes '+count+' players, reconnects and settles once', {timeout:62000},async()=>{
     const {createTrack}=await import('../public/race-v3/simulation.mjs');
@@ -173,6 +213,8 @@ for (const count of [2,5,10]) {
       assert.equal(state.endsAt-state.startsAt,45000);
       assert.equal(new Set(state.runners.map(p=>p.slot)).size,count);
       assert.ok(state.runners.every(p=>p.health===3&&p.stars===0));
+      assert.deepEqual(state.runners.map(p=>p.character),first.runners.map(p=>p.character));
+      assert.equal(new Set(state.runners.map(p=>p.character)).size,count);
     }
     let last=first;
     const collect=until(host.socket,'race-state',s=>s.runners.some(p=>p.id===host.id&&p.stars>0),10000);
@@ -196,12 +238,14 @@ for (const count of [2,5,10]) {
       guest.socket.disconnect();
       const rejoined=await player(guest.name,guest.session);
       const recovery=until(rejoined.socket,'race-state',s=>s.runners.some(r=>r.id===rejoined.id));
-      await request(rejoined,'join',{code});
+      await request(rejoined,'join',{code,name:undefined,resume:true});
       const snapshot=await recovery;
       const resumed=snapshot.runners.find(r=>r.id===rejoined.id);
       assert.equal(snapshot.seed,first.seed);
       assert.equal(snapshot.startsAt,first.startsAt);
       assert.equal(resumed.slot,guestBefore.slot);
+      assert.equal(resumed.character,guestBefore.character);
+      assert.equal(resumed.name,guestBefore.name);
       assert.ok(resumed.stars>=guestBefore.stars && resumed.stars<100);
       assert.ok(resumed.distance>=guestBefore.distance);
       assert.equal(snapshot.runners.length,count);
@@ -213,7 +257,7 @@ for (const count of [2,5,10]) {
       assert.equal(results.results.length,count);
       assert.equal(new Set(results.results.map(r=>r.id)).size,count);
       assert.ok(results.results.filter(r=>r.id===rejoined.id).length===1);
-      assert.ok(results.results.every(r=>r.value===r.stars*10&&r.stars<100));
+      assert.ok(results.results.every(r=>r.value===r.stars*10&&r.stars<100&&r.character));
       assert.ok(results.results.every((r,i)=>i===0||results.results[i-1].stars>=r.stars));
       assert.ok(results.players.every(p=>p.score===results.results.find(r=>r.id===p.id).earned));
       if (count===2)assert.ok(Date.now()>=first.endsAt,'steering player completes the full 45 second race');

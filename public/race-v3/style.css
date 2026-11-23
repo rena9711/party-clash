@@ -2,7 +2,7 @@
 *{box-sizing:border-box}
 body{margin:0;overflow:hidden;overscroll-behavior:none}
 [hidden]{display:none!important}
-#game{position:relative;isolation:isolate;height:100vh;height:100dvh;width:100%;overflow:hidden;touch-action:none}
+#game{position:relative;isolation:isolate;height:100vh;height:100dvh;width:100%;overflow:hidden;touch-action:manipulation}
 #scene,#effect{position:absolute;inset:0;width:100%;height:100%;display:block}
 #hud{position:absolute;inset:max(8px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) auto max(10px,env(safe-area-inset-left));display:flex;align-items:center;justify-content:center;gap:6px;z-index:1;pointer-events:none}
 #hud span,#pause{border:1px solid #8c68be5e;border-radius:12px;background:#170d30df;color:#fff;padding:.42rem .58rem;white-space:nowrap}
@@ -44,3 +44,17 @@ a{display:inline-block;padding:8px;color:#ece0ff}
 #boost{pointer-events:auto;min-height:44px;padding-inline:8px}
 #room-status{position:absolute;top:12%;left:50%;transform:translateX(-50%);padding:6px 10px;background:#170d30df;border-radius:10px;pointer-events:none;text-align:center;white-space:nowrap}
 @media(max-width:360px){#hud{gap:4px}#hud span{font-size:.76rem;padding-inline:5px}#boost,#pause{font-size:.78rem;min-width:34px;padding-inline:5px}}
+#nameplates{position:absolute;inset:0;pointer-events:none}
+#nameplates span{position:absolute;transform:translate(-50%,-110%);white-space:nowrap;max-width:45vw;overflow:hidden;text-overflow:ellipsis;padding:2px 6px;border-radius:6px;background:#170d30e8;font-size:.72rem}
+#nameplates .self{border:1px solid #5afaff;color:#aefbff}
+#room-leaderboard{position:absolute;z-index:2;top:max(58px,calc(env(safe-area-inset-top) + 49px));right:max(9px,env(safe-area-inset-right));max-width:57vw;background:#211337ed;border:1px solid #896bb4;border-radius:10px;padding:5px 8px;font-size:.76rem}
+#room-leaderboard ol{margin:4px 0;padding-left:1.45em;max-height:34vh;overflow:auto}
+#room-leaderboard li{overflow-wrap:anywhere}
+
+#scene,#controls{touch-action:none}
+#room-leaderboard ol{touch-action:pan-y}
+
+#boost{white-space:nowrap}
+#nameplates .left-edge{transform:translate(0,-110%)}
+#nameplates .right-edge{transform:translate(-100%,-110%)}
+#nameplates .self{z-index:1}
