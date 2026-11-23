@@ -38,3 +38,5 @@ body.snake-room-active{overflow:hidden;overscroll-behavior:none}
 .snake-back{position:fixed;z-index:8;top:max(8px,env(safe-area-inset-top));left:8px;padding:.65rem;border-radius:1rem;background:#231938;color:white}
 .snake-skills{position:absolute;right:8px;top:24%;display:grid;gap:5px}
 .snake-skills button{padding:.6rem;border-radius:.7rem;background:#382b51;color:white}
+
+.round-primary{display:block;margin:.15em 0;color:#f7b8d4;font-size:clamp(28px,7vmin,44px);line-height:1.15;font-weight:800}

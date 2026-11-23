@@ -227,6 +227,8 @@ function pulse(id,flicker) {
 }
 function finish() {
   updateHud();
+  get('final-distance').textContent=Math.round(run.distance)+' 米';
+  get('final-score').textContent='本局得分 '+(run.stars*10)+' 分';
   get('final-stars').textContent='收集星星：'+run.stars+' 颗';
   get('survival').textContent='存活时间：'+run.time.toFixed(1)+' 秒';
   resetInput();
