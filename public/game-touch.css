@@ -1,5 +1,5 @@
 .memory-colors{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:min(100%,360px);margin:16px auto;padding:8px}
-.memory-cell{aspect-ratio:1;min-width:0;border-radius:14px;border:2px solid #ffffff44;background:var(--cell);filter:brightness(.76);transition:filter .16s,box-shadow .16s;touch-action:manipulation}
+.memory-cell{aspect-ratio:1;min-width:0;border-radius:14px;border:2px solid #ffffff44;background:var(--cell);filter:brightness(.76);touch-action:manipulation}
 .memory-cell:disabled{opacity:1}
 .memory-cell.is-lit{filter:brightness(1.36);box-shadow:0 0 18px 4px var(--cell),inset 0 0 9px #fff9}
 #react,.race-touch button{touch-action:manipulation;min-height:48px}
@@ -14,7 +14,7 @@
 @keyframes race-flash{0%{opacity:.85;transform:translateX(3px)}25%{transform:translateX(-3px)}100%{opacity:0}}
 @keyframes race-particle{to{transform:translate(var(--dx),var(--dy));opacity:0}}
 @keyframes race-gain{from{transform:translateY(4px);opacity:1}to{transform:translateY(-14px);opacity:0}}
-@media(prefers-reduced-motion:reduce){.memory-cell{transition:none}.race-blast.active{animation:race-gain .42s ease-out}.race-blast i{display:none}}
+@media(prefers-reduced-motion:reduce){.race-blast.active{animation:race-gain .42s ease-out}.race-blast i{display:none}}
 body.snake-room-active{overflow:hidden;overscroll-behavior:none}
 .snake-room{position:fixed;inset:0;background:#110d20;overflow:hidden;touch-action:none}
 .snake-room canvas{display:block;width:calc(100% - clamp(108px,18vw,180px));height:100%}

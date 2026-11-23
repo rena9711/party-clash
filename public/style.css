@@ -9,9 +9,9 @@
 .race-road{height:38px;position:relative;border-radius:8px;background:repeating-linear-gradient(90deg,#ffffff08 0,#ffffff08 18px,#ffffff13 19px,#ffffff13 20px),linear-gradient(90deg,#33313f,#484153);overflow:hidden}
 .race-runner{position:absolute;top:0;z-index:2;font-size:28px;line-height:38px;transform:translateX(-4px);transition:left .09s linear;filter:drop-shadow(0 2px 3px #0006)}
 .race-finish{position:absolute;right:3px;top:4px;font-size:23px;opacity:.85}
-.animal-picker{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:12px 0}
-.animal-choice{font-size:27px;background:#282341;border:1px solid #66547b;border-radius:12px;min-height:55px}
-.animal-choice.chosen{border:2px solid #f7bad3;background:#674357}
+
+
+
 
 /* Mobile multiplayer 跑得快 */
 body.rm-active{overflow:hidden}

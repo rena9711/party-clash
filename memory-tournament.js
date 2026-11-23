@@ -1,7 +1,8 @@
 'use strict';
 
 const { randomInt } = require('node:crypto');
-const GAP = 400;
+const GAP = 200;
+const LOOKAHEAD = 1000;
 const ANSWER_TIME = 10000;
 
 function create(ids) {
@@ -10,7 +11,7 @@ function create(ids) {
 
 function next(game, now, random = randomInt) {
   const count = Math.min(9, game.round + 3);
-  const flash = Math.max(700, 1300 - game.round * 100);
+  const flash = Math.max(500, 800 - game.round * 50);
   const startsAt = now + 3000;
   const answerAt = startsAt + (count - 1) * (flash + GAP) + flash;
   const ids = game.tied || game.active;
@@ -68,11 +69,15 @@ function rename(game, oldId, newId) {
 
 function snapshot(game, now) {
   const { startsAt, answerAt, endsAt, flash, sequence, answers } = game.turn;
-  const elapsed = now - startsAt;
-  const index = Math.floor(elapsed / (flash + GAP));
-  const lit = elapsed >= 0 && now < answerAt && elapsed % (flash + GAP) < flash;
+  // Repeat only the current and imminent cues. Prebuffer short network delays
+  // without publishing the remaining answer sequence at the start of the round.
+  const cues = sequence.flatMap((cell, index) => {
+    const on = startsAt + index * (flash + GAP);
+    const off = on + flash;
+    return off > now && on <= now + LOOKAHEAD ? [{ cell, on, off }] : [];
+  });
   return { round: game.round, attempt: game.attempt, tie: Boolean(game.tied), startsAt, answerAt,
-    endsAt, now, count: sequence.length, cell: lit ? sequence[index] : null,
+    endsAt, now, count: sequence.length, cues,
     eliminated: game.eliminated, answers: [...answers].map(([id, p]) => ({ id, correct: p.correct, done: p.done })) };
 }
 

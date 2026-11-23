@@ -72,22 +72,25 @@ async function start(game,players){
 test('memory synchronizes, reconnects, breaks a bottom tie and crowns one winner', {concurrency:true,timeout:65000}, async ()=>{
   const [a,b,c]=await Promise.all([player('甲'),player('乙'),player('丙')]);
   const results=until(a.socket,'room',r=>r.game==='memory'&&r.phase==='results',60000);
-  const firstA=until(a.socket,'memory-state',s=>s.attempt===1&&s.cell!==null);
-  const firstB=until(b.socket,'memory-state',s=>s.attempt===1&&s.cell!==null);
+  const firstA=until(a.socket,'memory-state',s=>s.attempt===1&&s.cues.length>0);
+  const firstB=until(b.socket,'memory-state',s=>s.attempt===1&&s.cues.length>0);
   const tracked=new Map();
   a.socket.on('memory-state',s=>{
-    if(s.cell!==null){
-      const flash=Math.max(700,1300-s.round*100);
-      const index=Math.floor((s.now-s.startsAt)/(flash+400));
-      const sequence=tracked.get(s.attempt)||[];
-      sequence[index]=s.cell;
-      tracked.set(s.attempt,sequence);
+    const flash=Math.max(500,800-s.round*50);
+    const sequence=tracked.get(s.attempt)||[];
+    for(const cue of s.cues) {
+      const index=Math.round((cue.on-s.startsAt)/(flash+200));
+      sequence[index]=cue.cell;
     }
+    tracked.set(s.attempt,sequence);
   });
   const code=await start('memory',[a,b,c]);
   const [sa,sb]=await Promise.all([firstA,firstB]);
   assert.equal(sa.startsAt,sb.startsAt);
-  assert.equal(sa.cell,sb.cell);
+  assert.deepEqual(sa.cues,sb.cues);
+  assert.equal(sa.answerAt-sa.startsAt,3600);
+  assert.equal(sa.endsAt-sa.answerAt,10000);
+  assert.equal(typeof await a.socket.timeout(5000).emitWithAck('memory-clock'),'number');
   b.socket.disconnect();
   const resumed=await player(b.name,b.session);
   const resumedState=until(resumed.socket,'memory-state',s=>s.attempt===1);
@@ -142,4 +145,20 @@ test('Snake selection, input, disconnect/rejoin and server settlement', {concurr
   const result=await final;
   assert.equal(result.results.length,2);
   assert.equal(result.results.some(p=>p.id===resumed.id),true);
+});
+
+test('race starts with fixed foxes and reconnect reuses the runner without animal selection', {timeout:12000},async()=>{
+  const [host,guest]=await Promise.all([player('房主'),player('好友')]);
+  const ready=until(host.socket,'race-state',s=>s.runners.length===2);
+  const code=await start('race',[host,guest]);
+  const state=await ready;
+  assert.deepEqual(state.runners.map(runner=>runner.animal),['🦊','🦊']);
+  guest.socket.disconnect();
+  const resumed=await player(guest.name,guest.session);
+  const readyAgain=until(resumed.socket,'race-state',s=>s.runners.some(runner=>runner.id===resumed.id));
+  await request(resumed,'join',{code});
+  const refreshed=await readyAgain;
+  assert.equal(refreshed.runners.length,2);
+  assert.equal(refreshed.runners.find(runner=>runner.id===resumed.id).animal,'🦊');
+  assert.equal(refreshed.startsAt,state.startsAt);
 });
