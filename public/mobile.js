@@ -5,9 +5,9 @@ const $=x=>document.getElementById(x),G=[['tap','⚡','疯狂手速'],['precisio
   <h1>来来来，<span>一起大乱斗！</span></h1>
   <p>不用下载，即开即玩。叫上朋友，欢乐对决。</p>
   <div class="home-main-actions">
-   <button class="btn home-primary" id="room">👥 创建多人房间 <span>→</span></button>
-   <button class="btn home-secondary" id="joinRoom">加入房间</button>
-   <button class="btn home-secondary" id="quick">⚡ 单人热身</button>
+   <button class="btn home-primary" id="room"><span aria-hidden="true">🥳</span><span>创建多人房间</span></button>
+   <button class="btn home-secondary" id="joinRoom"><span aria-hidden="true">🙋</span><span>加入房间</span></button>
+   <button class="btn home-secondary" id="quick"><span aria-hidden="true">💪</span><span>单人热身</span></button>
   </div>
  </div>
  <div class="home-hero-art" aria-hidden="true"><div class="art-halo"></div><span class="art-star s1">✦</span><span class="art-star s2">★</span><span class="art-star s3">✧</span><div class="art-character character-left">🦊</div><div class="art-character character-main">🐰</div><div class="art-character character-right">🐼</div><div class="art-burst">GO!</div></div>
