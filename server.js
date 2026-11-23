@@ -117,7 +117,7 @@ function startMemory(r) {
   r.memoryInterval = setInterval(() => {
     const now = Date.now();
     if (now >= game.turn.endsAt || [...game.turn.answers.values()].every(p => p.done)) {
-      MemoryTournament.resolve(game);
+      if(game.active.length>1)MemoryTournament.resolve(game);
       if (game.active.length === 1) {
         clearInterval(r.memoryInterval);
         r.memoryInterval = null;
