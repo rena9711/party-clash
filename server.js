@@ -1,6 +1,9 @@
 const MemoryTournament = require('./memory-tournament');
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
 const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
+app.get('/race-v3/vendor/three.module.min.js', (_req, res) => {
+  res.sendFile(require('node:path').join(__dirname, 'node_modules/three/build/three.module.min.js'));
+});
 const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase}=require('./roomStore');
 const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race','snake'];
 const RACE_ANIMALS=['🐰','🦊','🐻','🐼','🐸','🐯','🦁','🐵','🐷','🐨'];
