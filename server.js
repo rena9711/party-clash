@@ -1,43 +1,41 @@
+const MemoryTournament = require('./memory-tournament');
+const {animals,validateName}=require('./public/player-identity');
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
 const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
+app.get('/race-v3/vendor/three.module.min.js', (_req, res) => {
+  res.sendFile(require('node:path').join(__dirname, 'node_modules/three/build/three.module.min.js'));
+});
 const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase}=require('./roomStore');
-const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race'];
-const RACE_ANIMALS=['🐰','🦊','🐻','🐼','🐸','🐯','🦁','🐵','🐷','🐨'];
+const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race','snake'];
 
-// 跑得快：服务器权威计时、障碍、星星与移动状态（仅测试玩法）
-function makeRace(r){const participants=[...r.players.values()].filter(p=>p.online!==false);
-  const obstacles=[],stars=[];let oid=0,sid=0;
-  for(let p=175;p<3900;p+=105+rand(37)){
-    const blocked=rand(3),lanes=[0,1,2].filter(l=>l!==blocked);
-    obstacles.push({id:oid++,p,l:blocked,kind:rand(100)<35?'hole':'box'});
-    if(p>310&&rand(100)<39){const second=lanes[rand(lanes.length)];obstacles.push({id:oid++,p:p+rand(10)-5,l:second,kind:'box'});lanes.splice(lanes.indexOf(second),1)}
-    const safe=lanes[rand(lanes.length)];for(let j=0;j<3;j++)stars.push({id:sid++,p:p+24+j*28,l:safe});
-  }
-  return {runners:participants.map((p,i)=>({id:p.id,name:p.name,animal:RACE_ANIMALS.includes(p.animal)?p.animal:RACE_ANIMALS[i%RACE_ANIMALS.length],lane:1,p:0,hp:3,stars:0,energy:100,autoUntil:0,jumpUntil:0,stunUntil:0,boost:false,hits:0,score:0,taken:[],collided:[],finished:false})),obstacles,stars,lastTick:Date.now(),duration:30000};
-}
-function raceSnapshot(r){const g=r.race;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,runners:g.runners.map(p=>({id:p.id,name:p.name,animal:p.animal,lane:p.lane,p:Math.round(p.p),hp:p.hp,stars:p.stars,energy:Math.round(p.energy),boost:p.boost,autoUntil:p.autoUntil,jumpUntil:p.jumpUntil,stunUntil:p.stunUntil,finished:p.finished,taken:p.taken})),obstacles:g.obstacles,stars:g.stars};}
-function raceTick(r){if(r.phase!=='playing'||r.game!=='race'||!r.race)return;const g=r.race,now=Date.now();
-  if(now<r.startsAt){io.to(r.code).emit('race-state',raceSnapshot(r));return}
-  const delta=Math.max(0,Math.min(.25,(now-g.lastTick)/1000));g.lastTick=now;
-  for(const p of g.runners){if(p.finished)continue;
-    const speeding=(p.boost&&p.energy>0||now<p.autoUntil)&&now>=p.stunUntil;
-    const elapsed=Math.max(0,(now-r.startsAt)/1000),base=72+Math.min(33,elapsed*.74);
-    const speed=now<p.stunUntil?base*.56:speeding?base+28:base;
-    p.p+=speed*delta;p.energy=Math.min(100,Math.max(0,p.energy+(p.boost&&now>=p.autoUntil&&speeding?-32:12)*delta));
-    const previous=p.p-speed*delta;
-    for(const o of g.obstacles){if(o.p>p.p+5||o.p<previous-12||o.l!==p.l||p.collided.includes(o.id))continue;
-      p.collided.push(o.id);if(now<p.jumpUntil){p.score+=12}else if(now>=p.stunUntil){p.hp--;p.hits++;p.stunUntil=now+1150;if(p.hp<=0){p.finished=true;p.boost=false}}
+let RaceV3;
+function broadcastRace(r, now = Date.now()) {
+  const shared = RaceV3.sharedRaceSnapshot(r.race, now);
+  for (const runner of r.race.runners) {
+    if (r.players.get(runner.id)?.online !== false) {
+      io.to(runner.id).volatile.emit('race-state', RaceV3.snapshotRace(r.race, runner.id, now, shared));
     }
-    for(const star of g.stars){if(star.p>p.p+5||star.p<previous-13||star.l!==p.l||p.taken.includes(star.id))continue;
-      p.taken.push(star.id);p.stars++;p.score+=10;p.energy=Math.min(100,p.energy+10);
-      if(p.stars%5===0)p.autoUntil=Math.max(p.autoUntil,now)+2500;
-    }
-    if(p.p>=3900)p.finished=true;
   }
-  io.to(r.code).emit('race-state',raceSnapshot(r));
-  if(g.runners.every(p=>p.finished))finish(r);
 }
-function finishRace(r){const racers=r.race?.runners||[];for(const runner of racers){const p=r.players.get(runner.id);if(p){p.value=runner.stars*10;p.submitted=true;}}}
+function raceTick(r) {
+  if (r.phase !== 'playing' || r.game !== 'race') return;
+  const now = Date.now();
+  const done = RaceV3.advanceRace(r.race, now);
+  if (now >= r.race.nextBroadcast || done) {
+    r.race.nextBroadcast = now + 100;
+    broadcastRace(r, now);
+  }
+  if (done) finish(r);
+}
+function finishRace(r) {
+  for (const runner of r.race.runners) {
+    const player = r.players.get(runner.id);
+    if (player) {
+      player.value = runner.run.stars * 10;
+      player.submitted = true;
+    }
+  }
+}
 
 function newBombGame(r){const participants=[...r.players.values()].filter(p=>p.online!==false).map(p=>p.id);return {secret:1+rand(100),low:1,high:100,turn:0,order:participants,history:[],loser:null,finished:false}}
 function bombPublic(r){const b=r.bomb;if(!b)return null;return {low:b.low,high:b.high,turnId:b.order[b.turn]||null,history:b.history.slice(-12),loser:b.loser,finished:b.finished,secret:b.finished?b.secret:undefined}}
@@ -53,51 +51,209 @@ const SNAKE_W=26,SNAKE_H=34;
 function makeSnake(r){
  const colors=['#f8bbd0','#ffe1a0','#8bd8c8','#ada6ff','#ff9e9e','#82bce8','#f8d38d','#b2e58d','#e6a5ef','#f8b9a0'];
  const players=[...r.players.values()].filter(p=>p.online!==false).map((p,i)=>({id:p.id,name:p.name,color:colors[i%colors.length],body:[],dir:{x:i%2?0:1,y:i%2?1:0},next:null,score:0,foods:0,kills:0,deaths:0,respawnAt:0,shieldUntil:0,online:true}));
- const g={players,foods:[],width:SNAKE_W,height:SNAKE_H,step:0,last:Date.now(),lastBroadcast:0};players.forEach((p,i)=>spawnSnake(g,p,i));while(g.foods.length<22)addSnakeFood(g);return g
+ const g={players,foods:[],width:SNAKE_W,height:SNAKE_H,step:0,last:Date.now(),lastBroadcast:0};players.forEach((p,i)=>spawnSnake(g,p,i));for(let attempt=g.foods.length;attempt<22;attempt++)addSnakeFood(g);return g
 }
 function isSnakeCellBusy(g,x,y){return g.players.some(p=>p.body.some(b=>b.x===x&&b.y===y))||g.foods.some(f=>f.x===x&&f.y===y)}
 function addSnakeFood(g){for(let t=0;t<130;t++){const x=1+rand(SNAKE_W-2),y=1+rand(SNAKE_H-2);if(!isSnakeCellBusy(g,x,y)){g.foods.push({x,y});return}}}
 function spawnSnake(g,p,i){for(let attempt=0;attempt<180;attempt++){const x=5+rand(SNAKE_W-10),y=5+rand(SNAKE_H-10),d=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}][rand(4)],body=Array.from({length:5},(_,j)=>({x:x-d.x*j,y:y-d.y*j}));if(body.every(c=>c.x>=1&&c.x<SNAKE_W-1&&c.y>=1&&c.y<SNAKE_H-1&&!isSnakeCellBusy(g,c.x,c.y))){p.body=body;p.dir=d;p.next=null;p.respawnAt=0;p.shieldUntil=Date.now()+900;return}}p.respawnAt=Date.now()+500;p.body=[]}
-function snakeSnapshot(r){const g=r.snake;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,width:g.width,height:g.height,foods:g.foods,players:g.players.map(p=>({id:p.id,name:p.name,color:p.color,body:p.body,score:p.score,foods:p.foods,kills:p.kills,deaths:p.deaths,respawnAt:p.respawnAt,shieldUntil:p.shieldUntil}))}}
+function snakeSnapshot(r){const g=r.snake;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,now:Date.now(),width:g.width,height:g.height,foods:g.foods,players:g.players.map(p=>({id:p.id,name:p.name,color:p.color,body:p.body,score:p.score,foods:p.foods,kills:p.kills,deaths:p.deaths,respawnAt:p.respawnAt,shieldUntil:p.shieldUntil}))}}
 function snakeTick(r){if(r.phase!=='playing'||r.game!=='snake'||!r.snake)return;const g=r.snake,now=Date.now();if(now<r.startsAt){io.to(r.code).emit('snake-state',snakeSnapshot(r));return}
  for(const p of g.players)if(!p.body.length&&p.respawnAt&&now>=p.respawnAt&&r.players.get(p.id)?.online!==false)spawnSnake(g,p,0);
  const live=g.players.filter(p=>p.body.length);
- const moves=live.map(p=>{const d=p.next&&!(p.next.x===-p.dir.x&&p.next.y===-p.dir.y)?p.next:p.dir;p.dir=d;p.next=null;return {p,d,head:{x:p.body[0].x+d.x,y:p.body[0].y+d.y},foodIndex:-1,dead:false,killer:null}});
- for(const m of moves){const idx=g.foods.findIndex(f=>f.x===m.head.x&&f.y===m.head.y);m.foodIndex=idx}
+ const moves=live.map(p=>{const d=p.next&&!(p.next.x===-p.dir.x&&p.next.y===-p.dir.y)?p.next:p.dir;p.dir=d;p.next=null;return {p,d,head:{x:p.body[0].x+d.x,y:p.body[0].y+d.y},food:null,dead:false,killer:null}});
+ for(const m of moves){m.food=g.foods.find(f=>f.x===m.head.x&&f.y===m.head.y)}
  for(const m of moves){if(m.head.x<0||m.head.x>=g.width||m.head.y<0||m.head.y>=g.height){m.dead=true;continue}
  for(const other of live){if(other===m.p)continue;const hit=other.body.some(c=>c.x===m.head.x&&c.y===m.head.y);if(hit){m.dead=true;m.killer=other;break}}
  }
  for(let a=0;a<moves.length;a++)for(let b=a+1;b<moves.length;b++){const x=moves[a],y=moves[b];if(x.head.x===y.head.x&&x.head.y===y.head.y){x.dead=true;y.dead=true}}
  for(const m of moves){const p=m.p;if(m.dead&&now>=p.shieldUntil){p.body=[];p.deaths++;p.score=Math.max(0,p.score-10);p.respawnAt=now+2000;if(m.killer&&m.killer!==p){m.killer.kills++;m.killer.score+=20}continue}if(m.dead){m.next=null;continue}
- p.body.unshift(m.head);if(m.foodIndex>=0){const food=g.foods[m.foodIndex];if(food){g.foods.splice(m.foodIndex,1);p.foods++;p.score+=10}}else p.body.pop();
+ p.body.unshift(m.head);const index=g.foods.indexOf(m.food);if(index>=0){g.foods.splice(index,1);p.foods++;p.score+=10}else p.body.pop();
  }
- while(g.foods.length<22)addSnakeFood(g);
+ for(let attempt=g.foods.length;attempt<22;attempt++)addSnakeFood(g);
  io.to(r.code).emit('snake-state',snakeSnapshot(r));
 }
 function finishSnake(r){for(const snake of r.snake?.players||[]){const p=r.players.get(snake.id);if(p){p.value=snake.score;p.submitted=true}}}
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,animal:p.animal||'',score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name,animal:p.animal}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
-function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
+function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);clearInterval(r.memoryInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
 function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
 function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(100,Number(value)||0));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
-function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=[...r.players.values()].sort((a,b)=>{if(r.game==='snake')return b.value-a.value; if(r.game==='race'){const ra=r.race?.runners.find(x=>x.id===a.id),rb=r.race?.runners.find(x=>x.id===b.id);return b.value-a.value||(rb?.p||0)-(ra?.p||0)}return b.value-a.value});const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,value:p.value,exploded:r.game==='bomb'&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.p||0):undefined,earned:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]);emit(r)}
-function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=r.game==='race'?makeRace(r):null;r.bomb=r.game==='bomb'?newBombGame(r):null;r.snake=r.game==='snake'?makeSnake(r):null;r.endsAt=r.startsAt+(r.game==='race'?30000:r.game==='snake'?60000:r.game==='memory'?22000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='race'){r.race.lastTick=r.startsAt;r.raceInterval=setInterval(()=>raceTick(r),100);io.to(r.code).emit('race-state',raceSnapshot(r))}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
+function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=r.game==='race'
+ ? RaceV3.standings(r.race).map(runner=>r.players.get(runner.id))
+ : [...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,character:r.game==='race'?p.character:undefined,value:p.value,exploded:r.game==='bomb'&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.run.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.run.distance||0):undefined,earned:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]);emit(r)}
+function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=r.game==='bomb'?newBombGame(r):null;r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
+  r.race=RaceV3.createRace([...r.players.values()].filter(p=>p.online!==false),r.seed,r.startsAt);
+  r.endsAt=r.race.endsAt;
+}if(r.game==='memory'){
+  r.memory=MemoryTournament.create([...r.players.values()].filter(p=>p.online!==false).map(p=>p.id));
+  nextMemoryTurn(r,Date.now());
+}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.race.nextBroadcast=Date.now()+100;r.raceInterval=setInterval(()=>raceTick(r),25);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
+function sendMemory(r, now = Date.now()) {
+  io.to(r.code).emit('memory-state', MemoryTournament.snapshot(r.memory, now));
+}
+
+function nextMemoryTurn(r, now) {
+  MemoryTournament.next(r.memory, now);
+  const {startsAt, answerAt, endsAt} = r.memory.turn;
+  Object.assign(r, {startsAt, answerAt, endsAt});
+}
+
+function startMemory(r) {
+  const game = r.memory;
+  sendMemory(r);
+  r.memoryInterval = setInterval(() => {
+    const now = Date.now();
+    if (now >= game.turn.endsAt || [...game.turn.answers.values()].every(p => p.done)) {
+      MemoryTournament.resolve(game);
+      if (game.active.length === 1) {
+        clearInterval(r.memoryInterval);
+        r.memoryInterval = null;
+        const placement = [game.active[0], ...game.eliminated.reverse()];
+        const points = [100,70,50,30,20,10,5,3,2,1];
+        r.results = placement.map((id, i) => {
+          const player = r.players.get(id);
+          player.score += points[i];
+          return { id, name: player.name, earned: points[i], champion: i === 0 };
+        });
+        r.phase = 'results';
+        emit(r);
+        return;
+      }
+      nextMemoryTurn(r, now);
+    }
+    sendMemory(r, now);
+  }, 80);
+}
+
+const validSession=value=>typeof value==='string'&&value.length>=12&&value.length<=80?value:'';
 io.on('connection',s=>{
-s.on('create',async({name,session}={},ack)=>{let c=code();while(rooms.has(c))c=code();const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null};rooms.set(c,r);r.players.set(s.id,{id:s.id,name:clean(name),session:typeof session==='string'?session.slice(0,80):'',score:0,ready:false,online:true});s.join(c);s.data.room=c;try{await saveRoom(r);ack?.({ok:true,code:c,id:s.id});emit(r)}catch(e){rooms.delete(c);s.leave(c);s.data.room=null;ack?.({error:'房间保存失败，请重试'});console.error('Create room persistence:',e.message)}});
-s.on('join',({code:raw,name,session}={},ack)=>{const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);if(!r)return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});let old=null;if(typeof session==='string'&&session.length>=12){for(const p of r.players.values()){if(p.session===session){old=p;break}}}if(!old&&r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'游戏进行中，请稍后加入'});if(!old&&r.players.size>=10)return ack?.({error:'房间已满'});clearTimeout(r.expireTimer);r.expireTimer=null;if(old){r.players.delete(old.id);if(r.host===old.id)r.host=s.id;if(r.race)for(const runner of r.race.runners){if(runner.id===old.id)runner.id=s.id}if(r.bomb)r.bomb.order=r.bomb.order.map(id=>id===old.id?s.id:id);if(r.snake)for(const p of r.snake.players){if(p.id===old.id)p.id=s.id}r.players.set(s.id,{...old,id:s.id,name:clean(name),online:true})}else r.players.set(s.id,{id:s.id,name:clean(name),session:typeof session==='string'?session.slice(0,80):'',score:0,ready:false,online:true});s.join(c);s.data.room=c;ack?.({ok:true,code:c,id:s.id});emit(r)});
+s.on('memory-clock',ack=>{if(typeof ack==='function')ack(Date.now())});
+s.on('create',async(input,ack)=>{
+  const {name,session}=input||{};
+  const identity=validateName(name);
+  if(identity.error)return ack?.(identity);
+  if(get(s))return ack?.({error:'请先离开当前房间'});
+  let c=code();
+  while(rooms.has(c))c=code();
+  const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null};
+  rooms.set(c,r);
+  r.players.set(s.id,{id:s.id,name:identity.name,session:validSession(session),score:0,ready:false,online:true});
+  s.join(c);
+  s.data.room=c;
+  try {
+    await saveRoom(r);
+    ack?.({ok:true,code:c,id:s.id});
+    emit(r);
+  } catch(e) {
+    rooms.delete(c);
+    s.leave(c);
+    s.data.room=null;
+    ack?.({error:'房间保存失败，请重试'});
+    console.error('Create room persistence:',e.message);
+  }
+});
+s.on('join',(input,ack)=>{
+  const {code:raw,name,session,resume}=input||{};
+  const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);
+  if(!r)return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});
+  if(get(s)&&get(s)!==r)return ack?.({error:'请先离开当前房间'});
+  const token=validSession(session);
+  const old=token&&[...r.players.values()].find(player=>player.session===token);
+  if(resume&&!old)return ack?.({error:'未找到原玩家，请确认昵称后加入'});
+  if(get(s)&&!old)return ack?.({error:'请先离开当前房间'});
+  const identity=old?null:validateName(name);
+  if(identity?.error)return ack?.(identity);
+  if(identity && [...r.players.values()].some(p=>p.name===identity.name)) {
+    return ack?.({error:'该昵称已被使用，请换一个名字'});
+  }
+  if(!old&&r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'游戏进行中，请稍后加入'});
+  if(!old&&r.players.size>=10)return ack?.({error:'房间已满'});
+  clearTimeout(r.expireTimer);
+  r.expireTimer=null;
+  if(old) {
+    if(old.id!==s.id){
+      const oldSocket=io.sockets.sockets.get(old.id);
+      if(oldSocket){oldSocket.leave(c);oldSocket.data.room=null}
+      r.players.delete(old.id);
+      if(r.host===old.id)r.host=s.id;
+      if(r.race)for(const runner of r.race.runners)if(runner.id===old.id){runner.id=s.id;RaceV3.clearInput(runner)}
+      if(r.bomb)r.bomb.order=r.bomb.order.map(id=>id===old.id?s.id:id);
+      if(r.snake)for(const player of r.snake.players)if(player.id===old.id){
+        player.id=s.id;
+        if(!player.body.length&&!player.respawnAt)player.respawnAt=Date.now()+500;
+      }
+      if(r.memory&&r.phase==='playing')MemoryTournament.rename(r.memory,old.id,s.id);
+      for(const result of r.results||[])if(result.id===old.id)result.id=s.id;
+    }
+    r.players.set(s.id,{...old,id:s.id,online:true});
+  } else {
+    r.players.set(s.id,{id:s.id,name:identity.name,session:token,score:0,ready:false,online:true});
+  }
+  s.join(c);
+  s.data.room=c;
+  ack?.({ok:true,code:c,id:s.id});
+  emit(r);
+  if(r.phase==='playing'&&r.game==='memory')s.emit('memory-state',MemoryTournament.snapshot(r.memory,Date.now()));
+  if(r.phase==='playing'&&r.game==='snake')s.emit('snake-state',snakeSnapshot(r));
+  if(r.phase==='playing'&&r.game==='race')s.emit('race-state',RaceV3.snapshotRace(r.race,s.id,Date.now()));
+});
+s.on('race-character',(character,ack)=>{
+  const room=get(s),player=room?.players.get(s.id);
+  if(!player||room.phase==='playing'||room.selectedGame!=='race'||!animals.some(([id])=>id===character)){
+    return ack?.({error:'当前不能选择该角色'});
+  }
+  if([...room.players.values()].some(other=>other.id!==s.id&&other.character===character)){
+    return ack?.({error:'该角色已被选择'});
+  }
+  player.character=character;
+  ack?.({ok:true});
+  emit(room);
+});
+s.on('leave-room',ack=>{
+  const room=get(s);
+  if(!room||room.phase==='playing')return ack?.({error:'比赛结束后可退出房间'});
+  room.players.delete(s.id);
+  s.leave(room.code);
+  s.data.room=null;
+  if(!room.players.size){
+    clearTimeout(room.expireTimer);
+    rooms.delete(room.code);
+    removeRoom(room.code).catch(error=>console.error('Room delete failed:',error.message));
+  }else{
+    if(room.host===s.id)room.host=([...room.players.values()].find(player=>player.online!==false)||room.players.values().next().value).id;
+    if(!onlineCount(room))roomExpiry(room);
+    emit(room);
+  }
+  ack?.({ok:true});
+});
 s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&r.phase!=='playing'&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
-s.on('animal-choice',({animal}={})=>{const r=get(s),p=r?.players.get(s.id);if(r&&p&&r.phase!=='playing'&&RACE_ANIMALS.includes(animal)){p.animal=animal;emit(r)}});
-s.on('start',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&onlineCount(r)>=2&&r.phase!=='playing')start(r,r.selectedGame||game)});
+s.on('start',({game}={})=>{
+  const r=get(s);
+  if(!r||r.host!==s.id||onlineCount(r)<2||r.phase==='playing')return;
+  const chosen=r.selectedGame||game;
+  if(chosen==='race'&&[...r.players.values()].some(player=>player.online!==false&&!player.character))return;
+  start(r,chosen);
+});
 s.on('bomb-guess',({number}={})=>{const r=get(s);if(r&&typeof number==='number')guessBomb(r,s.id,number)});
 s.on('snake-input',({x,y}={})=>{const r=get(s),p=r?.snake?.players.find(p=>p.id===s.id);if(!r||r.phase!=='playing'||r.game!=='snake'||!p||!p.body.length||Date.now()<r.startsAt)return;if(!Number.isInteger(x)||!Number.isInteger(y)||Math.abs(x)+Math.abs(y)!==1)return;if(x===-p.dir.x&&y===-p.dir.y)return;p.next={x,y}});
-s.on('race-input',({lane,jump,boost}={})=>{const r=get(s),g=r?.race,p=g?.runners.find(x=>x.id===s.id),now=Date.now();if(!r||r.phase!=='playing'||r.game!=='race'||!p||p.finished||now<r.startsAt||now>=r.endsAt)return;if(Number.isInteger(lane)&&lane>=0&&lane<=2)p.lane=lane;if(jump===true&&now>=p.jumpUntil)p.jumpUntil=now+850;if(typeof boost==='boolean')p.boost=boost});
-s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='race'||r.game==='bomb'||r.game==='snake'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
-s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 啟動防護盾`)}else if(t.shield){t.shield=false;s.emit('notice','對方護盾擋住了攻擊');r.log.push(`${t.name} 擋住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 對 ${t.name} 使用 ${card}`)}emit(r)});
-s.on('disconnect',()=>{const r=get(s);if(!r)return;const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.game==='bomb'&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next}if(onlineCount(r)===0)roomExpiry(r);emit(r)})
+s.on('race-input', input=>{
+  const room=get(s);
+  if(room?.phase==='playing'&&room.game==='race'&&room.players.has(s.id)) {
+    RaceV3.applyInput(room.race,s.id,input,Date.now());
+  }
+});
+s.on('memory-answer',({attempt,index,cell}={})=>{
+ const r=get(s);
+ if(r?.phase!=='playing'||r.game!=='memory'||!r.memory)return;
+ if(MemoryTournament.answer(r.memory,s.id,attempt,index,cell,Date.now()))sendMemory(r);
+});
+s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='race'||r.game==='bomb'||r.game==='snake'||r.game==='memory'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
+s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||(r.game==='memory'||r.game==='race')||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 启动防护盾`)}else if(t.shield){t.shield=false;s.emit('notice','对方护盾挡住了攻击');r.log.push(`${t.name} 挡住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 对 ${t.name} 使用 ${card}`)}emit(r)});
+s.on('disconnect',()=>{const r=get(s);if(!r)return;const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.race)RaceV3.clearInput(r.race.runners.find(runner=>runner.id===s.id));if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.game==='bomb'&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next}if(onlineCount(r)===0)roomExpiry(r);emit(r)})
 });
 
 // V0.6 prototype social API. No authentication: test data only; NOT secure for production/ranked use.
@@ -120,4 +276,4 @@ app.post('/api/challenge/:id/submit',(req,res)=>{const c=db.challenges.find(x=>x
 app.get('/api/rivals/:id',(req,res)=>{const id=req.params.id;if(!sid(id))return res.status(400).json({error:'无效玩家'});const rivals=new Map();for(const m of db.matches){if(m.a!==id&&m.b!==id)continue;const other=m.a===id?m.b:m.a;const x=rivals.get(other)||{id:other,wins:0,losses:0,draws:0,last:0};const a=m.a===id?m.aScore:m.bScore,b=m.a===id?m.bScore:m.aScore;if(a>b)x.wins++;else if(a<b)x.losses++;else x.draws++;x.last=m.at;rivals.set(other,x)}res.json([...rivals.values()].sort((a,b)=>b.last-a.last).map(x=>({...x,name:display(x.id)})))});
 app.get('/api/health',(req,res)=>res.json({ok:true,version:'0.9-room-storage',roomStorage:hasDatabase?'postgres':'memory',roomCount:rooms.size}));
 
-const PORT=process.env.PORT||3000;loadSavedRooms(rooms).then(()=>server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});
+const PORT=process.env.PORT||3000;import('./race-v3-room.mjs').then(core=>{RaceV3=core;return loadSavedRooms(rooms)}).then(()=>server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});

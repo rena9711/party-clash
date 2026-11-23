@@ -1,51 +1,96 @@
-/* 跑得快 Multiplayer playfield */
-window.RaceMulti=(()=>{
- const q=id=>document.getElementById(id),clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
- let active=false,room='',round=0,socket,me='',root,canvas,ctx,state=null,raf=0,pointer=null,startX=0,startLane=1,lane=1,boost=false,frameTime=0;
- function leave(){active=false;cancelAnimationFrame(raf);raf=0;state=null;pointer=null;boost=false;document.body.classList.remove('rm-active')}
- function emit(fields){if(active&&socket)socket.emit('race-input',fields)}
- function enter({room:rm,myId,socket:sk,root:mount}){
-  if(active&&room===rm.code&&round===rm.round){me=myId;return}
-  leave();active=true;room=rm.code;round=rm.round;me=myId;socket=sk;root=mount;lane=1;document.body.classList.add('rm-active');
-  root.innerHTML='<div id="rm-root"><canvas id="rm-canvas"></canvas><div id="rm-hud"><div id="rm-head"><span>⏱ <b id="rm-clock">30.0</b>s</span><span>⭐ <b id="rm-stars">0</b>分</span><span>🏆 第<b id="rm-rank">-</b>名</span></div><div id="rm-meter"><div id="rm-meter-fill"></div></div><div id="rm-tip">即将开跑…</div><div id="rm-board"></div></div><div id="rm-pad"><div id="rm-actions"><button id="rm-jump">⬆ 跳跃</button><button id="rm-boost">🔥 加速</button></div><div id="rm-joy"><div id="rm-knob"></div><span>左右移动</span></div></div></div>';
-  canvas=q('rm-canvas');ctx=canvas.getContext('2d');
-  const joy=q('rm-joy'),knob=q('rm-knob'),boostBtn=q('rm-boost');
-  joy.addEventListener('pointerdown',e=>{e.preventDefault();pointer=e.pointerId;startX=e.clientX;startLane=lane;try{joy.setPointerCapture(e.pointerId)}catch{}});
-  joy.addEventListener('pointermove',e=>{if(e.pointerId!==pointer)return;e.preventDefault();const dx=e.clientX-startX;knob.style.transform='translate(calc(-50% + '+clamp(dx,-38,38)+'px),-50%)';const to=clamp(startLane+Math.round(dx/34),0,2);if(to!==lane){lane=to;emit({lane})}});
-  const joyUp=e=>{if(e.pointerId!==pointer)return;pointer=null;knob.style.transform='translate(-50%,-50%)'};
-  for(const ev of ['pointerup','pointercancel','lostpointercapture'])joy.addEventListener(ev,joyUp);
-  q('rm-jump').addEventListener('pointerdown',e=>{e.preventDefault();emit({jump:true})});
-  boostBtn.addEventListener('pointerdown',e=>{e.preventDefault();boost=true;emit({boost:true});try{boostBtn.setPointerCapture(e.pointerId)}catch{}});
-  for(const ev of ['pointerup','pointercancel','lostpointercapture'])boostBtn.addEventListener(ev,()=>{if(boost){boost=false;emit({boost:false})}});
-  frameTime=performance.now();raf=requestAnimationFrame(draw);
- }
- function receive(data){if(!active||!data||!Array.isArray(data.runners))return;state=data;const p=data.runners.find(x=>x.id===me);if(p){lane=p.lane;q('rm-stars').textContent=p.stars*10;q('rm-meter-fill').style.width=p.energy+'%';const rankings=[...data.runners].sort((a,b)=>b.stars-a.stars||b.p-a.p);q('rm-rank').textContent=rankings.findIndex(x=>x.id===me)+1;const auto=Date.now()<p.autoUntil;q('rm-tip').textContent=p.hp<=0?'💥 已撞倒，等待本局结算':auto?'🔥 集满5颗星星！自动喷火加速中！':p.stars%5+'/5 颗星星 · 集满5颗自动加速';}
-  const now=Date.now();q('rm-clock').textContent=(Math.max(0,(data.endsAt-Math.max(now,data.startsAt))/1000)).toFixed(1);
-  const rows=[...data.runners].sort((a,b)=>b.stars-a.stars||b.p-a.p);
-  q('rm-board').innerHTML=rows.map((x,i)=>'<div class="rm-entry '+(x.id===me?'you':'')+'">'+(i+1)+'. '+x.animal+' '+escapeHtml(x.name)+' <strong>'+x.stars*10+'分</strong></div>').join('');
- }
- function escapeHtml(t){return String(t||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
- function draw(ts){if(!active)return;raf=requestAnimationFrame(draw);let w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(2,devicePixelRatio||1);if(canvas.width!==Math.floor(w*dpr)||canvas.height!==Math.floor(h*dpr)){canvas.width=Math.floor(w*dpr);canvas.height=Math.floor(h*dpr)}ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,w,h);let g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#25213b');g.addColorStop(.5,'#49354b');g.addColorStop(1,'#25282c');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
-  const horizon=h*.22,foot=h*.86,topW=w*.37,bottomW=w*.98;ctx.fillStyle='#2b4338';ctx.fillRect(0,horizon,w,h-horizon);
-  ctx.fillStyle='#56505b';ctx.beginPath();ctx.moveTo(w/2-topW/2,horizon);ctx.lineTo(w/2+topW/2,horizon);ctx.lineTo(w/2+bottomW/2,foot);ctx.lineTo(w/2-bottomW/2,foot);ctx.fill();
-  for(let i=1;i<3;i++){ctx.strokeStyle='#e6d6bb88';ctx.lineWidth=2;ctx.setLineDash([13,14]);ctx.beginPath();ctx.moveTo(w/2-topW/2+topW*i/3,horizon);ctx.lineTo(w/2-bottomW/2+bottomW*i/3,foot);ctx.stroke()}ctx.setLineDash([]);
-  if(!state)return;
-  const p=state.runners.find(x=>x.id===me);if(!p)return;
-  const now=Date.now(),clock=Math.max(0,(state.endsAt-now)/1000);q('rm-clock').textContent=clock.toFixed(1);
-  const lerpPos=(l,d)=>{const z=clamp(d/235,0,1),v=Math.pow(1-z,1.32);const width=topW*(1-v)+bottomW*v;return {x:w/2+(l-1)*width/3,y:horizon+(foot-horizon)*v,s:Math.max(.19,v*1.12)}};
-  const objects=[];
-  for(const ob of state.obstacles||[]){const d=ob.p-p.p;if(d>=-14&&d<235)objects.push({...lerpPos(ob.l,d),kind:ob.kind==='hole'?'hole':'box'})}
-  const collected=new Set(p.taken||[]); // client may omit taken; stars in lane remain cosmetic
-  for(const star of state.stars||[]){const d=star.p-p.p;if(d>=-14&&d<235&&!collected.has(star.id))objects.push({...lerpPos(star.l,d),kind:'star'})}
-  for(const other of state.runners){if(other.id===me)continue;const d=other.p-p.p;if(d>=-28&&d<235)objects.push({...lerpPos(other.lane,d),kind:'animal',animal:other.animal,name:other.name})}
-  objects.sort((a,b)=>a.s-b.s);
-  ctx.textAlign='center';ctx.textBaseline='middle';for(const ob of objects){ctx.font=Math.round((ob.kind==='box'?58:ob.kind==='star'?44:ob.kind==='hole'?52:43)*ob.s)+'px system-ui';ctx.fillText(ob.kind==='box'?'📦':ob.kind==='star'?'⭐':ob.kind==='hole'?'🕳️':ob.animal,ob.x,ob.y-14*ob.s)}
-  const you=lerpPos(1,0),x=lerpPos(p.lane,0).x,auto=now<p.autoUntil,flame=(auto||p.boost)&&p.energy>0;
-  if(flame&&now>=p.stunUntil){for(let i=0;i<3;i++){ctx.fillStyle=['#ff6425','#ffb42d','#fff2ad'][i];ctx.beginPath();ctx.ellipse(x+(i-1)*10,foot-19+Math.sin(ts*.025+i)*6,10-i*2,18-i*3,0,0,Math.PI*2);ctx.fill()}}
-  ctx.font='61px system-ui';ctx.fillText(p.animal,x,foot-60-(now<p.jumpUntil?42:0));
-  ctx.fillStyle='#fff';ctx.font='bold 13px system-ui';ctx.fillText('你 · '+p.stars*10+'分',x,foot-111-(now<p.jumpUntil?42:0));
-  if(now<state.startsAt){ctx.fillStyle='#ffe9f1';ctx.font='bold 35px system-ui';ctx.fillText('准备 '+Math.ceil((state.startsAt-now)/1000),w/2,h*.45)}
- }
- return {enter,receive,leave};
+/* The lobby owns the Socket.IO connection; the race view only exchanges inputs and snapshots. */
+window.RaceMulti = (() => {
+  let active, resultPanel, savedResult;
+  const query=new URLSearchParams(location.search);
+  const diagnosing=query.get('diagnostics')==='1';
+  const city=query.get('city')==='legacy'?'legacy':'optimized';
+  const origin = location.origin;
+
+  function send() {
+    if (!active?.ready || !active.latest) return;
+    active.frame.contentWindow.postMessage({
+      type: 'party-race-state', state: active.latest, playerId: active.playerId,
+      connected: active.socket.connected
+    }, origin);
+  }
+
+  function enter({room, myId, socket, root}) {
+    if (active?.code === room.code && active.round === room.round) {
+      if(active.playerId!==myId){
+        active.playerId = myId;
+        send();
+      }
+      return;
+    }
+    leave();
+    savedResult=null;
+    resultPanel?.remove();
+    document.body.classList.add('rm-active');
+    const frame = document.createElement('iframe');
+    frame.className = 'race-3d-frame';
+    frame.title = '跑得快 · 多人 3D';
+    frame.allow = 'accelerometer; gyroscope';
+    active = {code: room.code, round: room.round, playerId: myId, socket, frame};
+    frame.src='/race-v3/?mode=room'+(diagnosing?'&diagnostics=1&city='+city:'');
+    root.replaceChildren(frame);
+  }
+
+  function receive(state) {
+    if (!active || state?.version !== 3) return;
+    active.latest = state;
+    send();
+  }
+
+  window.addEventListener('message', event => {
+    if (!active || event.origin !== origin || event.source !== active.frame.contentWindow) return;
+    if (event.data?.type === 'party-race-ready') {
+      active.ready = true;
+      if(diagnosing&&!active.probe){
+        const session=active;
+        active.probe=setInterval(()=>{
+          if(!session.socket.connected)return;
+          const start=performance.now();
+          session.socket.timeout(1000).emit('memory-clock',error=>{
+            if(!error&&active===session)session.frame.contentWindow.postMessage({
+              type:'party-race-rtt',ms:performance.now()-start
+            },origin);
+          });
+        },2000);
+      }
+      send();
+    } else if (event.data?.type === 'party-race-input' && active.socket.connected) {
+      const input = event.data.input;
+      if (input?.jump || input?.boost || input?.axis === 0) active.socket.emit('race-input', input);
+      else active.socket.volatile.emit('race-input', input);
+    }
+  });
+
+  function disconnect() {
+    send();
+  }
+
+  function leave() {
+    if(diagnosing&&active){
+      clearInterval(active.probe);
+      const data=active.frame.contentWindow.partyRaceDiagnostics?.();
+      if(data?.frames.length){
+        savedResult=data;
+        import('/race-v3/diagnostics.mjs').then(({diagnosticsPanel})=>{
+          if(savedResult===data){
+            resultPanel?.remove();
+            resultPanel=diagnosticsPanel(()=>data,{floating:true});
+            resultPanel.open=true;
+          }
+        });
+      }
+    }
+    active?.frame.remove();
+    active = null;
+    document.body.classList.remove('rm-active');
+  }
+  function route(url) {
+    if(!diagnosing)return url;
+    return url+(url.includes('?')?'&':'?')+'diagnostics=1&city='+city;
+  }
+  return {enter, receive, disconnect, leave, route};
 })();
