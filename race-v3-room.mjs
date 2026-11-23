@@ -1,3 +1,4 @@
+import {packRunner} from './public/race-v3/wire.mjs';
 import {advance, boost, createRun, createTrack, DURATION, jump, STEP} from './public/race-v3/simulation.mjs';
 
 const INPUT_LEASE = 500;
@@ -55,16 +56,21 @@ export function standings(race) {
     b.run.stars - a.run.stars || b.run.distance - a.run.distance || a.slot - b.slot);
 }
 
-export function snapshotRace(race, id, now) {
+export function sharedRaceSnapshot(race, now) {
   const runners = standings(race).map(({id: playerId, name, character, slot, run}, index) => ({
-    id: playerId, name, character, slot, rank: index + 1, x: run.x, y: run.y, vx: run.vx, distance: run.distance,
+    id: playerId, name, character, slot, rank: index + 1, x: run.x, y: run.y, vx: run.vx, vy: run.vy, distance: run.distance,
     time: run.time, health: run.health, stars: run.stars, done: run.done,
     hit: run.hit, landedAt: run.landedAt, protectedUntil: run.protectedUntil,
     boostUntil: run.boostUntil, boostReadyAt: run.boostReadyAt
   }));
-  const mine = race.runners.find(player => player.id === id);
   return {
-    version: 3, seed: race.seed, tick: race.tick, now, startsAt: race.startsAt, endsAt: race.endsAt, runners,
-    consumed: mine?.run.objects.filter(object => object.used).map(({id, impactTime}) => [id, impactTime ?? null]) ?? []
+    version: 3, seed: race.seed, tick: race.tick, now, startsAt: race.startsAt, endsAt: race.endsAt,
+    rows: runners.map(packRunner)
   };
+}
+
+export function snapshotRace(race, id, now, shared = sharedRaceSnapshot(race, now)) {
+  const mine = race.runners.find(player => player.id === id);
+  return {...shared, consumed: mine?.run.objects.filter(object => object.used)
+    .map(({id, impactTime}) => [id, impactTime ?? null]) ?? []};
 }

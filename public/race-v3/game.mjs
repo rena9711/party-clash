@@ -6,12 +6,14 @@ const get = id => document.getElementById(id);
 const canvas = get('scene');
 const settings = get('sensitivity');
 const multiplayer = new URLSearchParams(location.search).get('mode') === 'room' && window.parent !== window;
-let network, lastSent = -Infinity, roomState, roomHealth, roomStars;
+let network, roomState, roomHealth, roomStars;
 const roomNotice = get('room-status');
 const nameplates=new Map();
 const labelMetrics=document.createElement('canvas').getContext('2d');
 labelMetrics.font='11.52px system-ui';
-let leaderboardKey='';
+let leaderboardKey='', leaderboardRunners;
+const labelWidths=new Map();
+let labelsAt=-Infinity;
 
 let view;
 let run = createRun();
@@ -38,7 +40,9 @@ function angle() {
   return ((screen.orientation?.angle ?? Number(window.orientation || 0))%360+360)%360;
 }
 function updateControls() {
-  get('controls').hidden = mode !== 'running' || baseline !== null || rotationPending || (multiplayer && Boolean(roomState?.run?.done));
+  const controls=get('controls');
+  const hide=mode !== 'running' || baseline !== null || rotationPending || (multiplayer && Boolean(roomState?.run?.done));
+  if(controls.hidden!==hide)controls.hidden=hide;
 }
 function show(next) {
   mode = next;
@@ -155,7 +159,6 @@ function resetInput() {
 }
 function play() {
   if (!multiplayer) run = createRun();
-  lastSent = -Infinity;
   lastFrame = null;
   timeDebt = 0;
   resetInput();
@@ -216,7 +219,8 @@ function frame(now) {
   if (mode==='running') {
     const previousHealth=run.health, previousStars=run.stars;
     if (baseline!==null && angle()!==screenAngle) recalibrateOrientation();
-    get('orientation-calibration').hidden=!rotationPending;
+    const orientationNotice=get('orientation-calibration');
+    if(orientationNotice.hidden===rotationPending)orientationNotice.hidden=!rotationPending;
     if (baseline !== null && rawAngle !== null) {
       const sample=clamp(rawAngle-baseline,-70,70);
       filtered+=(sample-filtered)*(1-Math.exp(-delta*17));
@@ -253,34 +257,40 @@ function frame(now) {
   schedule();
 }
 function renderRoom(now, delta, direction) {
-  roomState = network?.sample(now, delta);
+  roomState = network?.sample(now, delta, direction);
   const state = roomState;
   const upcoming = state && state.clock < state.startsAt;
   const label = !state?.connected ? '正在连接比赛…' :
     upcoming ? '准备 '+Math.ceil((state.startsAt-state.clock)/1000)+' 秒' :
     state.run?.done ? '本场已结束，等待其他玩家结算' : '';
-  roomNotice.hidden=!label;
+  if(roomNotice.hidden===Boolean(label))roomNotice.hidden=!label;
   if (roomNotice.textContent!==label) roomNotice.textContent=label;
   if (!state?.run) return;
   run=state.run;
-  if (state.connected && state.moving && now-lastSent>=65) {
-    network.input({axis:direction});
-    lastSent=now;
-  }
   if (roomHealth!==undefined && run.health<roomHealth && run.hit) pulse('effect',run.hit.kind);
   if (roomStars!==undefined && run.stars>roomStars) pulse('pickup');
   roomHealth=run.health;
   roomStars=run.stars;
-  get('rank').textContent='第 '+run.rank+' 名';
+  const rank='第 '+run.rank+' 名';
+  if(get('rank').textContent!==rank)get('rank').textContent=rank;
   const cooldown=Math.ceil(run.boostReadyAt-run.time);
-  get('boost').textContent=cooldown>0?cooldown+' 秒':'加速';
-  get('boost').disabled=cooldown>0 || !state.connected || !state.moving;
+  const boostLabel=cooldown>0?cooldown+' 秒':'加速';
+  if(get('boost').textContent!==boostLabel)get('boost').textContent=boostLabel;
+  const boostDisabled=cooldown>0 || !state.connected || !state.moving;
+  if(get('boost').disabled!==boostDisabled)get('boost').disabled=boostDisabled;
   updateHud(Math.max(0,(state.endsAt-Math.max(state.clock,state.startsAt))/1000));
   updateControls();
-  renderNameplates(view.render(run,run.time,false,state.others,state.runners.length));
+  const updateLabels=now-labelsAt>=50;
+  const labels=view.render(run,run.time,false,state.others,state.runners.length,updateLabels);
+  if(updateLabels){
+    renderNameplates(labels);
+    labelsAt=now;
+  }
   updateLeaderboard(state.runners);
 }
 function updateLeaderboard(runners) {
+  if(runners===leaderboardRunners)return;
+  leaderboardRunners=runners;
   const key=JSON.stringify(runners.map(p=>[p.id,p.rank,p.name,p.character,p.stars]));
   if(key===leaderboardKey)return;
   leaderboardKey=key;
@@ -294,7 +304,10 @@ function updateLeaderboard(runners) {
 }
 function renderNameplates(labels) {
   const visible=new Set();
-  const placed=layoutNameplates(labels,canvas.clientWidth,canvas.clientHeight,text=>labelMetrics.measureText(text).width);
+  const placed=layoutNameplates(labels,canvas.clientWidth,canvas.clientHeight,text=>{
+    if(!labelWidths.has(text))labelWidths.set(text,labelMetrics.measureText(text).width);
+    return labelWidths.get(text);
+  });
   for(const label of placed){
     visible.add(label.id);
     let node=nameplates.get(label.id);
@@ -305,8 +318,10 @@ function renderNameplates(labels) {
     }
     node.classList.toggle('self',label.self);
     if(node.textContent!==label.caption)node.textContent=label.caption;
-    node.style.transform='translate('+label.left+'px,'+label.top+'px)';
-    node.style.width=label.width+'px';
+    const transform='translate('+Math.round(label.left)+'px,'+Math.round(label.top)+'px)';
+    if(node.style.transform!==transform)node.style.transform=transform;
+    const width=label.width+'px';
+    if(node.style.width!==width)node.style.width=width;
   }
   for(const [id,node] of nameplates)if(!visible.has(id)){node.remove();nameplates.delete(id)}
 }

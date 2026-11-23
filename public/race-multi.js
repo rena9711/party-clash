@@ -13,8 +13,10 @@ window.RaceMulti = (() => {
 
   function enter({room, myId, socket, root}) {
     if (active?.code === room.code && active.round === room.round) {
-      active.playerId = myId;
-      send();
+      if(active.playerId!==myId){
+        active.playerId = myId;
+        send();
+      }
       return;
     }
     leave();
@@ -41,7 +43,7 @@ window.RaceMulti = (() => {
       send();
     } else if (event.data?.type === 'party-race-input' && active.socket.connected) {
       const input = event.data.input;
-      if (input?.jump || input?.boost) active.socket.emit('race-input', input);
+      if (input?.jump || input?.boost || input?.axis === 0) active.socket.emit('race-input', input);
       else active.socket.volatile.emit('race-input', input);
     }
   });

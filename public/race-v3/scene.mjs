@@ -162,7 +162,7 @@ export function createScene(canvas) {
     camera.fov=camera.aspect>1.45 ? 47 : 53;
     camera.updateProjectionMatrix();
   }
-  function render(run,time,preview,others=[],rosterSize=1) {
+  function render(run,time,preview,others=[],rosterSize=1,projectNames=true) {
     const scale=preview?1:raceModelScale(rosterSize);
     city(run.distance);
     objects(run,time);
@@ -195,7 +195,7 @@ export function createScene(canvas) {
     }
     animalFactory.flush();
     renderer.render(scene,camera);
-    if (preview||!run.id) return [];
+    if (!projectNames||preview||!run.id) return [];
     return [{runner:run,z:0,self:true},...visible].flatMap(({runner,z,self,distant})=>{
       if(distant)return [];
       point.set(runner.x,runner.y+2.40*scale,z).project(camera);

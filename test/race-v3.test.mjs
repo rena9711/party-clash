@@ -183,7 +183,8 @@ test('server race uses one seeded course, authoritative action limits and runner
   assert.equal(boost(a.run),false);
   clearInput(a);
   a.id='reconnected';
-  const resumed=snapshotRace(race,'reconnected',3250);
+  const {unpackRace}=await import('../public/race-v3/wire.mjs');
+  const resumed=unpackRace(snapshotRace(race,'reconnected',3250));
   assert.ok(resumed.runners.some(runner=>runner.id==='reconnected'&&runner.slot===0));
   assert.ok(!resumed.runners.some(runner=>runner.id==='0'));
   const x=a.run.x;
@@ -192,7 +193,7 @@ test('server race uses one seeded course, authoritative action limits and runner
   advanceRace(race,3600);
   assert.ok(Math.abs(a.run.x-x)<.5);
   assert.equal(advanceRace(race,48000),true);
-  assert.deepEqual(snapshotRace(race,a.id,48000).runners.map(p=>p.id),standings(race).map(p=>p.id));
+  assert.deepEqual(unpackRace(snapshotRace(race,a.id,48000)).runners.map(p=>p.id),standings(race).map(p=>p.id));
 });
 
 test('reconnect preserves consumed star identity and cannot award it again', async () => {
@@ -232,5 +233,69 @@ test('small viewports prioritize the self label and keep placed names apart', ()
           label.top+19<=other.top||other.top+19<=label.top);
       }
     }
+  }
+});
+
+test('compact race snapshots round only display coordinates and preserve recipient effects', async () => {
+  const {createRace, sharedRaceSnapshot, snapshotRace}=await import('../race-v3-room.mjs');
+  const {unpackRace}=await import('../public/race-v3/wire.mjs');
+  const race=createRace([{id:'a',name:'跑手🦊',character:'fox'},{id:'b',name:'跑手🐰',character:'rabbit'}],123,1000);
+  const run=race.runners[0].run;
+  run.x=.123456;
+  run.stars=2;
+  run.objects.push({id:7,used:true,impactTime:.42});
+  const shared=sharedRaceSnapshot(race,2000);
+  const a=snapshotRace(race,'a',2000,shared), b=snapshotRace(race,'b',2000,shared);
+  assert.equal(a.rows,b.rows);
+  const decoded=unpackRace(JSON.parse(JSON.stringify(a)));
+  assert.deepEqual(decoded.consumed,[[7,.42]]);
+  assert.deepEqual(b.consumed,[]);
+  assert.equal(decoded.runners[0].name,'跑手🦊');
+  assert.equal(decoded.runners[0].stars,2);
+  assert.equal(decoded.runners[0].x,.123);
+  assert.equal(decoded.runners[1].rank,2);
+  assert.ok(JSON.stringify(a).length<JSON.stringify(decoded).length);
+});
+
+test('room input predicts local motion, coalesces steady input and retains authoritative stars', async () => {
+  const {connectRaceView}=await import('../public/race-v3/room-client.mjs');
+  const {createRace,snapshotRace}=await import('../race-v3-room.mjs');
+  const originalWindow=globalThis.window, originalLocation=globalThis.location;
+  const messages=[];
+  const parent={postMessage(message){messages.push(message)}};
+  let receive;
+  globalThis.window={parent,addEventListener(_event,callback){receive=callback}};
+  globalThis.location={origin:'https://race.test'};
+  try {
+    const view=connectRaceView();
+    const race=createRace([{id:'local',name:'甲',character:'fox'},{id:'other',name:'乙',character:'rabbit'}],99,1000);
+    const deliver=(time,connected=true)=>{
+      receive({origin:location.origin,source:parent,data:{
+        type:'party-race-state',state:snapshotRace(race,'local',time),playerId:'local',connected
+      }});
+    };
+    deliver(1100);
+    const now=performance.now();
+    const initial=view.sample(now,0).run.x;
+    for(let step=1;step<=7;step++)view.sample(now+step*16,.016,1);
+    const predicted=view.sample(now+128,.016,1).run;
+    assert.ok(predicted.x>initial+.1);
+    assert.equal(predicted.stars,0);
+    assert.equal(messages.filter(p=>p.input?.axis===1).length,1);
+    view.sample(now+150,.016,0);
+    assert.equal(messages.at(-1).input.axis,0);
+    const releases=messages.filter(p=>p.input?.axis===0).length;
+    view.sample(now+450,.016,0);
+    assert.equal(messages.filter(p=>p.input?.axis===0).length,releases);
+    race.runners[0].run.stars=3;
+    deliver(1200);
+    assert.equal(view.sample(performance.now(),0).run.stars,3);
+    deliver(1200,false);
+    assert.equal(view.sample(performance.now(),0).connected,false);
+  } finally {
+    if(originalWindow===undefined)delete globalThis.window;
+    else globalThis.window=originalWindow;
+    if(originalLocation===undefined)delete globalThis.location;
+    else globalThis.location=originalLocation;
   }
 });

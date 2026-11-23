@@ -104,6 +104,21 @@ export function advance(run, dt, direction) {
   run.time = Math.min(DURATION, run.time + dt);
   run.speed = 12 + Math.min(run.time * .12, 5.4) + (run.time < run.boostUntil ? 5 : 0);
   run.distance += run.speed * dt;
+  advanceMotion(run, dt, direction);
+  if (run.track) {
+    while (run.track[run.trackIndex]?.at < run.distance + 76) {
+      run.objects.push({...run.track[run.trackIndex++]});
+    }
+  } else {
+    while (run.nextDistance < run.distance + 76) spawnWave(run);
+  }
+  collide(run, before);
+  while (run.objects.length && run.objects[0].at < run.distance - 5) run.objects.shift();
+  run.done = run.health === 0 || run.time >= DURATION;
+}
+
+// Shared between the authoritative simulation and local visual prediction.
+export function advanceMotion(run, dt, direction) {
   const target = clamp(direction, -1, 1) * 7.2;
   run.vx += (target - run.vx) * (1 - Math.exp(-dt * 16));
   if (!target && Math.abs(run.vx) < .08) run.vx = 0;
@@ -117,14 +132,4 @@ export function advance(run, dt, direction) {
       run.landedAt = run.time;
     }
   }
-  if (run.track) {
-    while (run.track[run.trackIndex]?.at < run.distance + 76) {
-      run.objects.push({...run.track[run.trackIndex++]});
-    }
-  } else {
-    while (run.nextDistance < run.distance + 76) spawnWave(run);
-  }
-  collide(run, before);
-  while (run.objects.length && run.objects[0].at < run.distance - 5) run.objects.shift();
-  run.done = run.health === 0 || run.time >= DURATION;
 }

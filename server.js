@@ -10,9 +10,10 @@ const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine'
 
 let RaceV3;
 function broadcastRace(r, now = Date.now()) {
+  const shared = RaceV3.sharedRaceSnapshot(r.race, now);
   for (const runner of r.race.runners) {
     if (r.players.get(runner.id)?.online !== false) {
-      io.to(runner.id).volatile.emit('race-state', RaceV3.snapshotRace(r.race, runner.id, now));
+      io.to(runner.id).volatile.emit('race-state', RaceV3.snapshotRace(r.race, runner.id, now, shared));
     }
   }
 }
@@ -20,7 +21,10 @@ function raceTick(r) {
   if (r.phase !== 'playing' || r.game !== 'race') return;
   const now = Date.now();
   const done = RaceV3.advanceRace(r.race, now);
-  broadcastRace(r, now);
+  if (now >= r.race.nextBroadcast || done) {
+    r.race.nextBroadcast = now + 100;
+    broadcastRace(r, now);
+  }
   if (done) finish(r);
 }
 function finishRace(r) {
@@ -87,7 +91,7 @@ function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clear
 }if(r.game==='memory'){
   r.memory=MemoryTournament.create([...r.players.values()].filter(p=>p.online!==false).map(p=>p.id));
   nextMemoryTurn(r,Date.now());
-}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.raceInterval=setInterval(()=>raceTick(r),100);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
+}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.race.nextBroadcast=Date.now()+100;r.raceInterval=setInterval(()=>raceTick(r),25);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
 function sendMemory(r, now = Date.now()) {
   io.to(r.code).emit('memory-state', MemoryTournament.snapshot(r.memory, now));
 }

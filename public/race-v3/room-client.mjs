@@ -1,52 +1,134 @@
-import {createTrack} from './simulation.mjs';
+import {advanceMotion, BOUNDARY, clamp, createTrack, jump} from './simulation.mjs';
+import {unpackRace} from './wire.mjs';
+
+const MAX_AGE = 600;
+const INTERPOLATION_MS = 135;
+const SEND_INTERVAL = 65;
+const KEEPALIVE = 200;
+const interpolate = (a,b,t) => a+(b-a)*t;
+const poseRate={x:10,y:10,distance:27,vx:Infinity};
 
 export function connectRaceView() {
-  let packet, seed, track, receivedAt;
-  const poses = new Map();
+  let packet, seed, track, mine, display, receivedAt, clockOffset;
+  let displayedObjects, lastSent=-Infinity, sentAxis;
+  const history=[];
+  const remote=new Map();
   const origin = location.origin;
 
   window.addEventListener('message', event => {
     if (event.origin !== origin || event.source !== window.parent ||
         event.data?.type !== 'party-race-state') return;
-    const {state, playerId, connected} = event.data;
-    if (state?.version !== 3 || (packet && packet.state.tick > state.tick)) return;
-    if (state.tick !== packet?.state.tick || state.now !== packet?.state.now) receivedAt = performance.now();
-    packet = {state, playerId, connected};
-    if (state.seed !== seed) {
-      seed = state.seed;
-      track = createTrack(seed);
+    const {state:raw, playerId, connected} = event.data;
+    if (raw?.version !== 3 || (packet && (packet.state.tick > raw.tick || packet.state.now > raw.now))) return;
+    if (packet?.state.now === raw.now && packet?.playerId === playerId && packet.state.tick === raw.tick) {
+      packet.connected=connected;
+      if(!connected) sentAxis=undefined;
+      return;
     }
+    const state=unpackRace(raw);
+    const now=performance.now();
+    if (state.seed!==seed) {
+      seed=state.seed;
+      track=createTrack(seed);
+      history.length=0;
+      remote.clear();
+      display=null;
+      clockOffset=undefined;
+    }
+    const offset=now-state.now;
+    // Prefer low-delay observations and slew slowly as a connection's baseline changes.
+    clockOffset=clockOffset===undefined?offset:Math.min(offset,clockOffset+.5);
+    receivedAt=now;
+    packet={state, playerId, connected};
+    mine=state.runners.find(runner=>runner.id===playerId);
+    if(mine){
+      if(!display || display.id!==mine.id || mine.done || !connected) display={...mine};
+      else {
+        const position={x:display.x,vx:display.vx,y:display.y,vy:display.vy,distance:display.distance};
+        Object.assign(display,mine,position);
+      }
+      const taken=new Map(state.consumed);
+      displayedObjects=[];
+      for(const item of track){
+        if(item.at<mine.distance-8)continue;
+        if(item.at>=mine.distance+79)break;
+        displayedObjects.push(taken.has(item.id)?{...item,used:true,impactTime:taken.get(item.id)}:item);
+      }
+    }
+    history.push({now:state.now, runners:new Map(state.runners.map(runner=>[runner.slot,runner]))});
+    if(history.length>12)history.shift();
   });
 
+  function send(input) {
+    if(packet?.connected)window.parent.postMessage({type:'party-race-input', input}, origin);
+  }
   window.parent.postMessage({type:'party-race-ready'}, origin);
+  const others=[];
+  const result={others};
   return {
     input(input) {
-      if (packet?.connected) window.parent.postMessage({type:'party-race-input', input}, origin);
+      if(input.axis===0) sentAxis=undefined;
+      if(input.jump && display && result.connected && result.moving) jump(display);
+      send(input);
     },
-    sample(now, delta) {
+    sample(now, delta, direction=0) {
       if (!packet) return null;
-      const {state, playerId, connected} = packet;
-      const maxAge = 600;
-      const age = now - receivedAt;
-      const mine = state.runners.find(runner => runner.id === playerId);
-      const clock = state.now + Math.max(0, Math.min(maxAge, age));
-      const connectedNow = connected && age < maxAge;
-      if (!mine) return {clock, startsAt:state.startsAt, endsAt:state.endsAt, connected:connectedNow};
-      const moving = !mine.done && clock >= state.startsAt;
-      const approach = 1 - Math.exp(-delta * 20);
-      const players = state.runners.map(runner => {
-        const target = {x:runner.x, y:runner.y, distance:runner.distance, vx:runner.vx};
-        const pose = poses.get(runner.slot) ?? {...target};
-        for (const key of Object.keys(target)) pose[key] += (target[key]-pose[key])*approach;
-        poses.set(runner.slot, pose);
-        return {...runner, ...pose};
-      });
-      const run = players.find(runner => runner.id === playerId);
-      const taken = new Map(state.consumed);
-      const objects = track.filter(item => item.at >= run.distance-6 && item.at < run.distance+76)
-        .map(item => taken.has(item.id) ? {...item, used:true, impactTime:taken.get(item.id)} : item);
-      return {clock, startsAt:state.startsAt, endsAt:state.endsAt, connected:connectedNow, moving,
-        run:{...run, objects}, runners:state.runners, others:players.filter(runner => runner.id!==playerId && !runner.done)};
+      const {state, connected}=packet;
+      const age=now-receivedAt;
+      const clock=state.now+clamp(age,0,MAX_AGE);
+      Object.assign(result,{clock, startsAt:state.startsAt, endsAt:state.endsAt,
+        connected:connected&&age<MAX_AGE, moving:Boolean(mine&&!mine.done&&clock>=state.startsAt),
+        run:display, runners:state.runners});
+      if(!mine)return result;
+      if(result.connected&&result.moving){
+        const axis=Math.round(direction*20)/20;
+        const changed=sentAxis!==axis;
+        if((changed && (axis===0 || now-lastSent>=SEND_INTERVAL)) ||
+           (axis!==0 && now-lastSent>=KEEPALIVE)){
+          send({axis});
+          lastSent=now;
+          sentAxis=axis;
+        }
+        advanceMotion(display,delta,direction);
+        const correction=1-Math.exp(-delta*9);
+        const overhang=clamp(clock-state.now,0,160)/1000;
+        const targetX=clamp(mine.x+mine.vx*overhang,-BOUNDARY,BOUNDARY);
+        display.x+=(targetX-display.x)*correction;
+        // A predicted jump may be briefly ahead of the server; reconcile against
+        // airborne samples without continually restarting a jump on the ground.
+        if(mine.y>.02 && Math.abs(display.y-mine.y)>.24)
+          display.y+=(mine.y-display.y)*correction;
+        const speed=12+Math.min(mine.time*.12,5.4)+(mine.time<mine.boostUntil?5:0);
+        display.distance=interpolate(display.distance,mine.distance+speed*overhang,1-Math.exp(-delta*20));
+      } else {
+        sentAxis=undefined;
+      }
+      display.objects=displayedObjects;
+      others.length=0;
+      const playback=now-clockOffset-INTERPOLATION_MS;
+      const upper=history.findIndex(frame=>frame.now>=playback);
+      const next=history[upper<0?history.length-1:upper];
+      const previous=history[upper<0?history.length-1:Math.max(upper-1,0)];
+      const blend=clamp((playback-previous.now)/Math.max(1,next.now-previous.now),0,1);
+      for(const runner of next.runners.values()){
+        if(runner.slot===mine.slot||runner.done)continue;
+        const from=previous.runners.get(runner.slot)??runner;
+        let pose=remote.get(runner.slot);
+        if(!pose){
+          pose={...runner, runner};
+          remote.set(runner.slot,pose);
+        } else if(pose.runner!==runner){
+          const {x,y,distance,vx}=pose;
+          Object.assign(pose,runner,{runner,x,y,distance,vx});
+        }
+        for(const key of Object.keys(poseRate)){
+          const target=interpolate(from[key],runner[key],blend);
+          const limit=key==='vx'?Infinity:poseRate[key]*delta;
+          pose[key]+=clamp(target-pose[key],-limit,limit);
+        }
+        others.push(pose);
+      }
+      return result;
     }
   };
 }

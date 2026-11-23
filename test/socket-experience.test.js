@@ -5,7 +5,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const connect = require(path.resolve(require.resolve('socket.io'), '../../client-dist/socket.io.js'));
 
-let child, origin;
+let child, origin, unpackRace;
 const sockets = new Set();
 
 function until(socket, event, matches = () => true, milliseconds = 15000) {
@@ -15,6 +15,7 @@ function until(socket, event, matches = () => true, milliseconds = 15000) {
       reject(new Error('Timed out waiting for '+event));
     }, milliseconds);
     function listener(data) {
+      if (event === 'race-state') data = unpackRace(data);
       if (!matches(data)) return;
       clearTimeout(timeout);
       socket.off(event, listener);
@@ -25,6 +26,7 @@ function until(socket, event, matches = () => true, milliseconds = 15000) {
 }
 
 before(async () => {
+  ({unpackRace}=await import('../public/race-v3/wire.mjs'));
   const port = 32000 + process.pid % 20000;
   child = spawn(process.execPath,['server.js'],{cwd:path.resolve(__dirname,'..'),env:{...process.env,PORT:String(port),DATABASE_URL:''},stdio:['ignore','pipe','inherit']});
   origin = 'http://127.0.0.1:'+port;
@@ -218,7 +220,7 @@ for (const count of [2,5,10]) {
     }
     let last=first;
     const collect=until(host.socket,'race-state',s=>s.runners.some(p=>p.id===host.id&&p.stars>0),10000);
-    host.socket.on('race-state',state=>{last=state});
+    host.socket.on('race-state',state=>{last=unpackRace(state)});
     const track=createTrack(first.seed);
     const hazards=track.filter(item=>item.kind!=='star');
     const firstStar=track[0];
