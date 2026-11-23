@@ -16,27 +16,6 @@
 /* Mobile multiplayer 跑得快 */
 body.rm-active{overflow:hidden}
 body.rm-active main{max-width:100vw;padding:0;height:100dvh;min-height:100dvh;background:#17151f}
-#rm-root{height:100dvh;width:min(100%,480px);margin:0 auto;position:relative;overflow:hidden;background:#211e29;touch-action:none}
-#rm-canvas{width:100%;height:100%;display:block}
-#rm-hud{position:absolute;top:calc(10px + env(safe-area-inset-top));left:12px;right:12px;pointer-events:none}
-#rm-head{display:flex;gap:6px;justify-content:space-between}
-#rm-head span{background:#111116df;border:1px solid #ffffff38;padding:7px 9px;border-radius:12px;font-size:12px;font-weight:800}
-#rm-meter{height:7px;background:#443c44;border-radius:10px;overflow:hidden;margin:9px 0}
-#rm-meter-fill{height:100%;width:100%;background:#fee39c;transition:width .12s}
-#rm-tip{text-align:center;background:#1a1820e8;color:#f8bbd0;font-size:12px;padding:7px;border-radius:10px;border:1px solid #ffffff25}
-#rm-board{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px}
-.rm-entry{background:#191720c9;color:#fff;padding:5px 7px;border-radius:8px;font-size:10px}
-.rm-entry.you{background:#5c364d;border:1px solid #f8bbd0}
-.rm-entry strong{color:#fee39c}
-#rm-pad{position:absolute;bottom:calc(17px + env(safe-area-inset-bottom));left:13px;right:13px;display:flex;flex-direction:row-reverse;justify-content:space-between;align-items:flex-end;gap:14px}
-#rm-joy{width:112px;height:112px;flex:none;border-radius:50%;background:#2b2835e9;border:2px solid #f8bbd0a3;position:relative;touch-action:none}
-#rm-joy:before{content:'◀　▶';color:#fff6;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:13px}
-#rm-knob{width:50px;height:50px;background:radial-gradient(circle at 25% 20%,#ffeaf2,#f8bbd0);border-radius:50%;border:2px solid #fff9;box-shadow:0 3px 12px #0009;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none}
-#rm-joy span{position:absolute;bottom:-16px;text-align:center;left:0;right:0;color:#f8bbd0;font-size:10px}
-#rm-actions{display:flex;gap:8px;align-items:end;min-width:0}
-#rm-actions button{width:78px;min-height:66px;border:0;border-radius:15px;font-weight:800;font-size:14px;touch-action:manipulation}
-#rm-jump{background:#f8bbd0;color:#33202a}
-#rm-boost{background:#ffe2a0;color:#382a17}
 
 /* 大爆炸：数字范围与猜测面板 */
 .bomb-ball{font-size:96px;filter:drop-shadow(0 0 20px #ff7c6a90);animation:bomb-shake 1.3s ease-in-out infinite;margin:13px 0}
@@ -55,3 +34,5 @@ body.rm-active main{max-width:100vw;padding:0;height:100dvh;min-height:100dvh;ba
 header{gap:12px}
 header .site-logo{display:block;width:clamp(140px,52vw,224px);height:auto;min-width:0;flex:0 1 auto}
 header .pill{flex:none;white-space:nowrap}
+
+.race-3d-frame{display:block;width:100%;height:100%;border:0}

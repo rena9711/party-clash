@@ -1,4 +1,4 @@
-const { before, after, test } = require('node:test');
+const { before, after, describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
@@ -69,6 +69,7 @@ async function start(game,players){
   return code;
 }
 
+describe('independent room regressions', {concurrency:true}, ()=>{
 test('memory synchronizes, reconnects, breaks a bottom tie and crowns one winner', {concurrency:true,timeout:65000}, async ()=>{
   const [a,b,c]=await Promise.all([player('甲'),player('乙'),player('丙')]);
   const results=until(a.socket,'room',r=>r.game==='memory'&&r.phase==='results',60000);
@@ -147,18 +148,78 @@ test('Snake selection, input, disconnect/rejoin and server settlement', {concurr
   assert.equal(result.results.some(p=>p.id===resumed.id),true);
 });
 
-test('race starts with fixed foxes and reconnect reuses the runner without animal selection', {timeout:12000},async()=>{
-  const [host,guest]=await Promise.all([player('房主'),player('好友')]);
-  const ready=until(host.socket,'race-state',s=>s.runners.length===2);
-  const code=await start('race',[host,guest]);
-  const state=await ready;
-  assert.deepEqual(state.runners.map(runner=>runner.animal),['🦊','🦊']);
-  guest.socket.disconnect();
-  const resumed=await player(guest.name,guest.session);
-  const readyAgain=until(resumed.socket,'race-state',s=>s.runners.some(runner=>runner.id===resumed.id));
-  await request(resumed,'join',{code});
-  const refreshed=await readyAgain;
-  assert.equal(refreshed.runners.length,2);
-  assert.equal(refreshed.runners.find(runner=>runner.id===resumed.id).animal,'🦊');
-  assert.equal(refreshed.startsAt,state.startsAt);
+
+test('all eight games can be selected and start in two-player rooms', {timeout:20000},async()=>{
+  for (const game of ['tap','precision','reaction','memory','bomb','mine','race','snake']) {
+    const players=await Promise.all([player('主 '+game),player('客 '+game)]);
+    await start(game,players);
+    for(const p of players) p.socket.disconnect();
+  }
+});
+
+for (const count of [2,5,10]) {
+  test('3D race synchronizes '+count+' players, reconnects and settles once', {timeout:62000},async()=>{
+    const {createTrack}=await import('../public/race-v3/simulation.mjs');
+    const roster=await Promise.all(Array.from({length:count},(_,i)=>player('跑手 '+i)));
+    const [host,guest]=roster;
+    const initial=roster.map(p=>until(p.socket,'race-state',s=>s.version===3&&s.runners.length===count));
+    const finished=until(host.socket,'room',s=>s.game==='race'&&s.phase==='results',58000);
+    const code=await start('race',roster);
+    const states=await Promise.all(initial);
+    const first=states[0];
+    for(const state of states){
+      assert.equal(state.seed,first.seed);
+      assert.equal(state.startsAt,first.startsAt);
+      assert.equal(state.endsAt-state.startsAt,45000);
+      assert.equal(new Set(state.runners.map(p=>p.slot)).size,count);
+      assert.ok(state.runners.every(p=>p.health===3&&p.stars===0));
+    }
+    let last=first;
+    const collect=until(host.socket,'race-state',s=>s.runners.some(p=>p.id===host.id&&p.stars>0),10000);
+    host.socket.on('race-state',state=>{last=state});
+    const track=createTrack(first.seed);
+    const hazards=track.filter(item=>item.kind!=='star');
+    const firstStar=track[0];
+    const drive=setInterval(()=>{
+      const mine=last.runners.find(p=>p.id===host.id);
+      const next=hazards.find(item=>item.at>mine.distance-.9);
+      if(!next||mine.done||last.now<first.startsAt)return;
+      const target=next===hazards[0]?firstStar.x:(next.x>=0?-3.15:3.15);
+      const axis=Math.max(-1,Math.min(1,(target-mine.x-mine.vx*.11)*2));
+      host.socket.volatile.emit('race-input',{axis});
+    },40);
+    try{
+      const gathered=await collect;
+      assert.ok(gathered.consumed.length>0);
+      const guestBefore=gathered.runners.find(r=>r.id===guest.id);
+      assert.ok(guestBefore.distance>0);
+      guest.socket.disconnect();
+      const rejoined=await player(guest.name,guest.session);
+      const recovery=until(rejoined.socket,'race-state',s=>s.runners.some(r=>r.id===rejoined.id));
+      await request(rejoined,'join',{code});
+      const snapshot=await recovery;
+      const resumed=snapshot.runners.find(r=>r.id===rejoined.id);
+      assert.equal(snapshot.seed,first.seed);
+      assert.equal(snapshot.startsAt,first.startsAt);
+      assert.equal(resumed.slot,guestBefore.slot);
+      assert.ok(resumed.stars>=guestBefore.stars && resumed.stars<100);
+      assert.ok(resumed.distance>=guestBefore.distance);
+      assert.equal(snapshot.runners.length,count);
+      rejoined.socket.emit('submit',{value:100});
+      rejoined.socket.emit('race-input',{axis:200,stars:900,health:90,boost:true});
+      const boost=await until(rejoined.socket,'race-state',s=>s.runners.some(r=>r.id===rejoined.id&&r.boostUntil>r.time));
+      assert.ok(boost.runners.find(r=>r.id===rejoined.id).health<=3);
+      const results=await finished;
+      assert.equal(results.results.length,count);
+      assert.equal(new Set(results.results.map(r=>r.id)).size,count);
+      assert.ok(results.results.filter(r=>r.id===rejoined.id).length===1);
+      assert.ok(results.results.every(r=>r.value===r.stars*10&&r.stars<100));
+      assert.ok(results.results.every((r,i)=>i===0||results.results[i-1].stars>=r.stars));
+      assert.ok(results.players.every(p=>p.score===results.results.find(r=>r.id===p.id).earned));
+      if (count===2)assert.ok(Date.now()>=first.endsAt,'steering player completes the full 45 second race');
+    }finally{
+      clearInterval(drive);
+    }
+  });
+}
 });

@@ -15,7 +15,7 @@ const $=x=>document.getElementById(x),G=[['tap','⚡','疯狂手速'],['precisio
 <section class="panel home-games-panel">
  <div class="section home-section-title"><span>✨ 全部小游戏</span><small>随时来一局</small></div>
  <div class="games">${G.filter(g=>g[0]!=='bomb').map(g=>`<button class="game" data-game="${g[0]}"><span class="emoji">${g[1]}</span><b>${g[2]}</b><small>${desc[g[0]]}</small><span class="game-chevron">↗</span></button>`).join('')}
-  <button class="game" id="raceRoom"><span class="emoji">🦊</span><b>跑得快</b><small>30秒跑酷 · 多人</small></button>
+  <button class="game" id="raceRoom"><span class="emoji">🦊</span><b>跑得快</b><small>45秒跑酷 · 多人</small></button>
   <button class="game" id="bombRoom"><span class="emoji">💣</span><b>大爆炸</b><small>轮流猜数 · 多人</small></button>
   <button class="game" id="snakeRoom"><span class="emoji">🐍</span><b>贪吃蛇</b><small>多人竞技 · 实时对战</small></button>
  </div>

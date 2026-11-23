@@ -82,32 +82,6 @@ test('reaction uses unrounded event time and scores exact boundaries', () => {
   assert.equal(vm.runInContext('reactionResult()',ctx),'抢跑 · 请等绿灯亮起');
 });
 
-test('race authority awards stars by lane and prevents repeated bomb damage', () => {
-  let now=1000;
-  const ctx={Date:{now:()=>now},io:{to:()=>({emit(){}})},finish(){}};
-  vm.createContext(ctx);
-  vm.runInContext(source.slice(source.indexOf('function raceSnapshot'),source.indexOf('function finishRace')),ctx);
-  const runner={id:'1',lane:1,p:100,hp:3,hits:0,stars:0,energy:100,protectedUntil:0,stunUntil:0,taken:[],collided:[],score:0};
-  const game={phase:'playing',game:'race',startsAt:900,race:{runners:[runner],lastTick:900,obstacles:[{id:1,p:102,l:1},{id:2,p:107,l:1}],stars:[{id:3,p:103,l:1},{id:4,p:103,l:2}]}};
-  ctx.raceTick(game);
-  assert.equal(runner.hp,2);
-  assert.equal(runner.hits,1);
-  assert.equal(runner.stars,1);
-  now+=100;
-  ctx.raceTick(game);
-  assert.equal(runner.hp,2);
-  assert.deepEqual(runner.taken,[3]);
-  for(let i=0;i<2;i++){
-    now+=1501;
-    game.race.lastTick=now-20;
-    game.race.obstacles.push({id:5+i,p:runner.p+1,l:1});
-    ctx.raceTick(game);
-  }
-  assert.equal(runner.hp,0);
-  assert.equal(runner.finished,true);
-  assert.equal(runner.stars,1);
-});
-
 test('existing Snake engine counts distinct food in one tick, wall death and respawn', () => {
   let now=1000;
   const ctx={Date:{now:()=>now},rand:max=>Math.floor(Math.random()*max),io:{to:()=>({emit(){}})}};

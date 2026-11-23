@@ -1,44 +1,36 @@
 const MemoryTournament = require('./memory-tournament');
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
 const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
+app.get('/race-v3/vendor/three.module.min.js', (_req, res) => {
+  res.sendFile(require('node:path').join(__dirname, 'node_modules/three/build/three.module.min.js'));
+});
 const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase}=require('./roomStore');
 const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race','snake'];
 
-// 跑得快：服务器权威计时、障碍、星星与移动状态（仅测试玩法）
-function makeRace(r){const participants=[...r.players.values()].filter(p=>p.online!==false);
-  const obstacles=[],stars=[];let oid=0,sid=0;
-  for(let p=175;p<3900;p+=105+rand(37)){
-    const blocked=rand(3),lanes=[0,1,2].filter(l=>l!==blocked);
-    obstacles.push({id:oid++,p,l:blocked,kind:'bomb'});
-    if(p>310&&rand(100)<39){const second=lanes[rand(lanes.length)];obstacles.push({id:oid++,p:p+rand(10)-5,l:second,kind:'bomb'});lanes.splice(lanes.indexOf(second),1)}
-    const safe=lanes[rand(lanes.length)];for(let j=0;j<3;j++)stars.push({id:sid++,p:p+24+j*28,l:safe});
-  }
-  return {runners:participants.map(p=>({id:p.id,name:p.name,animal:'🦊',lane:1,p:0,hp:3,protectedUntil:0,stars:0,energy:100,autoUntil:0,jumpUntil:0,stunUntil:0,boost:false,hits:0,score:0,taken:[],collided:[],finished:false})),obstacles,stars,lastTick:Date.now(),duration:30000};
-}
-function raceSnapshot(r){const g=r.race;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,runners:g.runners.map(p=>({id:p.id,name:p.name,animal:p.animal,lane:p.lane,p:Math.round(p.p),hp:p.hp,hits:p.hits,stars:p.stars,energy:Math.round(p.energy),boost:p.boost,autoUntil:p.autoUntil,jumpUntil:p.jumpUntil,stunUntil:p.stunUntil,finished:p.finished,taken:p.taken})),obstacles:g.obstacles,stars:g.stars};}
-function raceTick(r){if(r.phase!=='playing'||r.game!=='race'||!r.race)return;const g=r.race,now=Date.now();
-  if(now<r.startsAt){io.to(r.code).emit('race-state',raceSnapshot(r));return}
-  const delta=Math.max(0,Math.min(.25,(now-g.lastTick)/1000));g.lastTick=now;
-  for(const p of g.runners){if(p.finished)continue;
-    const speeding=(p.boost&&p.energy>0||now<p.autoUntil)&&now>=p.stunUntil;
-    const elapsed=Math.max(0,(now-r.startsAt)/1000),base=72+Math.min(33,elapsed*.74);
-    const speed=now<p.stunUntil?base*.56:speeding?base+28:base;
-    p.p+=speed*delta;p.energy=Math.min(100,Math.max(0,p.energy+(p.boost&&now>=p.autoUntil&&speeding?-32:12)*delta));
-    const previous=p.p-speed*delta;
-    for(const o of g.obstacles){if(o.p>p.p+5||o.p<previous-12||o.l!==p.lane||p.collided.includes(o.id))continue;
-      p.collided.push(o.id);if(now<p.jumpUntil){p.score+=12}else if(now>=p.protectedUntil){p.hp--;p.hits++;p.stunUntil=now+1150;p.protectedUntil=now+1500;if(p.hp<=0){p.finished=true;p.boost=false}}
+let RaceV3;
+function broadcastRace(r, now = Date.now()) {
+  for (const runner of r.race.runners) {
+    if (r.players.get(runner.id)?.online !== false) {
+      io.to(runner.id).volatile.emit('race-state', RaceV3.snapshotRace(r.race, runner.id, now));
     }
-    if(p.finished)continue;
-    for(const star of g.stars){if(star.p>p.p+5||star.p<previous-13||star.l!==p.lane||p.taken.includes(star.id))continue;
-      p.taken.push(star.id);p.stars++;p.score+=10;p.energy=Math.min(100,p.energy+10);
-      if(p.stars%5===0)p.autoUntil=Math.max(p.autoUntil,now)+2500;
-    }
-    if(p.p>=3900)p.finished=true;
   }
-  io.to(r.code).emit('race-state',raceSnapshot(r));
-  if(g.runners.every(p=>p.finished))finish(r);
 }
-function finishRace(r){const racers=r.race?.runners||[];for(const runner of racers){const p=r.players.get(runner.id);if(p){p.value=runner.stars*10;p.submitted=true;}}}
+function raceTick(r) {
+  if (r.phase !== 'playing' || r.game !== 'race') return;
+  const now = Date.now();
+  const done = RaceV3.advanceRace(r.race, now);
+  broadcastRace(r, now);
+  if (done) finish(r);
+}
+function finishRace(r) {
+  for (const runner of r.race.runners) {
+    const player = r.players.get(runner.id);
+    if (player) {
+      player.value = runner.run.stars * 10;
+      player.submitted = true;
+    }
+  }
+}
 
 function newBombGame(r){const participants=[...r.players.values()].filter(p=>p.online!==false).map(p=>p.id);return {secret:1+rand(100),low:1,high:100,turn:0,order:participants,history:[],loser:null,finished:false}}
 function bombPublic(r){const b=r.bomb;if(!b)return null;return {low:b.low,high:b.high,turnId:b.order[b.turn]||null,history:b.history.slice(-12),loser:b.loser,finished:b.finished,secret:b.finished?b.secret:undefined}}
@@ -79,17 +71,22 @@ function finishSnake(r){for(const snake of r.snake?.players||[]){const p=r.playe
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name,animal:p.animal}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
 function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);clearInterval(r.memoryInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
 function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
 function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(100,Number(value)||0));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
-function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=[...r.players.values()].sort((a,b)=>{if(r.game==='snake')return b.value-a.value; if(r.game==='race'){const ra=r.race?.runners.find(x=>x.id===a.id),rb=r.race?.runners.find(x=>x.id===b.id);return b.value-a.value||(rb?.p||0)-(ra?.p||0)}return b.value-a.value});const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,value:p.value,exploded:r.game==='bomb'&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.p||0):undefined,earned:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]);emit(r)}
-function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=r.game==='race'?makeRace(r):null;r.bomb=r.game==='bomb'?newBombGame(r):null;r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.endsAt=r.startsAt+(r.game==='race'?30000:r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='memory'){
+function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=r.game==='race'
+ ? RaceV3.standings(r.race).map(runner=>r.players.get(runner.id))
+ : [...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,value:p.value,exploded:r.game==='bomb'&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.run.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.run.distance||0):undefined,earned:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]);emit(r)}
+function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=r.game==='bomb'?newBombGame(r):null;r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
+  r.race=RaceV3.createRace([...r.players.values()].filter(p=>p.online!==false),r.seed,r.startsAt);
+  r.endsAt=r.race.endsAt;
+}if(r.game==='memory'){
   r.memory=MemoryTournament.create([...r.players.values()].filter(p=>p.online!==false).map(p=>p.id));
   nextMemoryTurn(r,Date.now());
-}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.race.lastTick=r.startsAt;r.raceInterval=setInterval(()=>raceTick(r),100);io.to(r.code).emit('race-state',raceSnapshot(r))}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
+}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.raceInterval=setInterval(()=>raceTick(r),100);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
 function sendMemory(r, now = Date.now()) {
   io.to(r.code).emit('memory-state', MemoryTournament.snapshot(r.memory, now));
 }
@@ -130,25 +127,30 @@ function startMemory(r) {
 io.on('connection',s=>{
 s.on('memory-clock',ack=>{if(typeof ack==='function')ack(Date.now())});
 s.on('create',async({name,session}={},ack)=>{let c=code();while(rooms.has(c))c=code();const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null};rooms.set(c,r);r.players.set(s.id,{id:s.id,name:clean(name),session:typeof session==='string'?session.slice(0,80):'',score:0,ready:false,online:true});s.join(c);s.data.room=c;try{await saveRoom(r);ack?.({ok:true,code:c,id:s.id});emit(r)}catch(e){rooms.delete(c);s.leave(c);s.data.room=null;ack?.({error:'房间保存失败，请重试'});console.error('Create room persistence:',e.message)}});
-s.on('join',({code:raw,name,session}={},ack)=>{const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);if(!r)return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});let old=null;if(typeof session==='string'&&session.length>=12){for(const p of r.players.values()){if(p.session===session){old=p;break}}}if(!old&&r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'游戏进行中，请稍后加入'});if(!old&&r.players.size>=10)return ack?.({error:'房间已满'});clearTimeout(r.expireTimer);r.expireTimer=null;if(old){r.players.delete(old.id);if(r.host===old.id)r.host=s.id;if(r.race)for(const runner of r.race.runners){if(runner.id===old.id)runner.id=s.id}if(r.bomb)r.bomb.order=r.bomb.order.map(id=>id===old.id?s.id:id);if(r.snake)for(const p of r.snake.players){if(p.id===old.id){p.id=s.id;if(!p.body.length&&!p.respawnAt)p.respawnAt=Date.now()+500}}
+s.on('join',({code:raw,name,session}={},ack)=>{const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);if(!r)return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});let old=null;if(typeof session==='string'&&session.length>=12){for(const p of r.players.values()){if(p.session===session){old=p;break}}}if(!old&&r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'游戏进行中，请稍后加入'});if(!old&&r.players.size>=10)return ack?.({error:'房间已满'});clearTimeout(r.expireTimer);r.expireTimer=null;if(old){r.players.delete(old.id);if(r.host===old.id)r.host=s.id;if(r.race)for(const runner of r.race.runners){if(runner.id===old.id){runner.id=s.id;RaceV3.clearInput(runner)}}if(r.bomb)r.bomb.order=r.bomb.order.map(id=>id===old.id?s.id:id);if(r.snake)for(const p of r.snake.players){if(p.id===old.id){p.id=s.id;if(!p.body.length&&!p.respawnAt)p.respawnAt=Date.now()+500}}
 if(r.memory&&r.phase==='playing')MemoryTournament.rename(r.memory,old.id,s.id);r.players.set(s.id,{...old,id:s.id,name:clean(name),online:true})}else r.players.set(s.id,{id:s.id,name:clean(name),session:typeof session==='string'?session.slice(0,80):'',score:0,ready:false,online:true});s.join(c);s.data.room=c;ack?.({ok:true,code:c,id:s.id});emit(r);
 if(r.phase==='playing'&&r.game==='memory')s.emit('memory-state',MemoryTournament.snapshot(r.memory,Date.now()));
 if(r.phase==='playing'&&r.game==='snake')s.emit('snake-state',snakeSnapshot(r));
-if(r.phase==='playing'&&r.game==='race')s.emit('race-state',raceSnapshot(r));
+if(r.phase==='playing'&&r.game==='race')s.emit('race-state',RaceV3.snapshotRace(r.race,s.id,Date.now()));
 });
 s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&r.phase!=='playing'&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
 s.on('start',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&onlineCount(r)>=2&&r.phase!=='playing')start(r,r.selectedGame||game)});
 s.on('bomb-guess',({number}={})=>{const r=get(s);if(r&&typeof number==='number')guessBomb(r,s.id,number)});
 s.on('snake-input',({x,y}={})=>{const r=get(s),p=r?.snake?.players.find(p=>p.id===s.id);if(!r||r.phase!=='playing'||r.game!=='snake'||!p||!p.body.length||Date.now()<r.startsAt)return;if(!Number.isInteger(x)||!Number.isInteger(y)||Math.abs(x)+Math.abs(y)!==1)return;if(x===-p.dir.x&&y===-p.dir.y)return;p.next={x,y}});
-s.on('race-input',({lane,jump,boost}={})=>{const r=get(s),g=r?.race,p=g?.runners.find(x=>x.id===s.id),now=Date.now();if(!r||r.phase!=='playing'||r.game!=='race'||!p||p.finished||now<r.startsAt||now>=r.endsAt)return;if(Number.isInteger(lane)&&lane>=0&&lane<=2)p.lane=lane;if(jump===true&&now>=p.jumpUntil)p.jumpUntil=now+850;if(typeof boost==='boolean')p.boost=boost});
+s.on('race-input', input=>{
+  const room=get(s);
+  if(room?.phase==='playing'&&room.game==='race'&&room.players.has(s.id)) {
+    RaceV3.applyInput(room.race,s.id,input,Date.now());
+  }
+});
 s.on('memory-answer',({attempt,index,cell}={})=>{
  const r=get(s);
  if(r?.phase!=='playing'||r.game!=='memory'||!r.memory)return;
  if(MemoryTournament.answer(r.memory,s.id,attempt,index,cell,Date.now()))sendMemory(r);
 });
 s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='race'||r.game==='bomb'||r.game==='snake'||r.game==='memory'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
-s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||r.game==='memory'||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 启动防护盾`)}else if(t.shield){t.shield=false;s.emit('notice','对方护盾挡住了攻击');r.log.push(`${t.name} 挡住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 对 ${t.name} 使用 ${card}`)}emit(r)});
-s.on('disconnect',()=>{const r=get(s);if(!r)return;const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.game==='bomb'&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next}if(onlineCount(r)===0)roomExpiry(r);emit(r)})
+s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||(r.game==='memory'||r.game==='race')||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 启动防护盾`)}else if(t.shield){t.shield=false;s.emit('notice','对方护盾挡住了攻击');r.log.push(`${t.name} 挡住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 对 ${t.name} 使用 ${card}`)}emit(r)});
+s.on('disconnect',()=>{const r=get(s);if(!r)return;const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.race)RaceV3.clearInput(r.race.runners.find(runner=>runner.id===s.id));if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.game==='bomb'&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next}if(onlineCount(r)===0)roomExpiry(r);emit(r)})
 });
 
 // V0.6 prototype social API. No authentication: test data only; NOT secure for production/ranked use.
@@ -171,4 +173,4 @@ app.post('/api/challenge/:id/submit',(req,res)=>{const c=db.challenges.find(x=>x
 app.get('/api/rivals/:id',(req,res)=>{const id=req.params.id;if(!sid(id))return res.status(400).json({error:'无效玩家'});const rivals=new Map();for(const m of db.matches){if(m.a!==id&&m.b!==id)continue;const other=m.a===id?m.b:m.a;const x=rivals.get(other)||{id:other,wins:0,losses:0,draws:0,last:0};const a=m.a===id?m.aScore:m.bScore,b=m.a===id?m.bScore:m.aScore;if(a>b)x.wins++;else if(a<b)x.losses++;else x.draws++;x.last=m.at;rivals.set(other,x)}res.json([...rivals.values()].sort((a,b)=>b.last-a.last).map(x=>({...x,name:display(x.id)})))});
 app.get('/api/health',(req,res)=>res.json({ok:true,version:'0.9-room-storage',roomStorage:hasDatabase?'postgres':'memory',roomCount:rooms.size}));
 
-const PORT=process.env.PORT||3000;loadSavedRooms(rooms).then(()=>server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});
+const PORT=process.env.PORT||3000;import('./race-v3-room.mjs').then(core=>{RaceV3=core;return loadSavedRooms(rooms)}).then(()=>server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});
