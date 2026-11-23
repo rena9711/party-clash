@@ -260,7 +260,9 @@ test('compact race snapshots round only display coordinates and preserve recipie
 test('room input predicts local motion, coalesces steady input and retains authoritative stars', async () => {
   const {connectRaceView}=await import('../public/race-v3/room-client.mjs');
   const {createRace,snapshotRace}=await import('../race-v3-room.mjs');
-  const originalWindow=globalThis.window, originalLocation=globalThis.location;
+  const originalWindow=globalThis.window, originalLocation=globalThis.location, originalPerformance=globalThis.performance;
+  let time=1000;
+  globalThis.performance={now:()=>time};
   const messages=[];
   const parent={postMessage(message){messages.push(message)}};
   let receive;
@@ -288,11 +290,24 @@ test('room input predicts local motion, coalesces steady input and retains autho
     view.sample(now+450,.016,0);
     assert.equal(messages.filter(p=>p.input?.axis===0).length,releases);
     race.runners[0].run.stars=3;
-    deliver(1200);
-    assert.equal(view.sample(performance.now(),0).run.stars,3);
-    deliver(1200,false);
+    time=1450;
+    deliver(1550);
+    assert.equal(view.sample(time,0).run.stars,3);
+    race.runners[1].run.distance=1.2;
+    time=1550;
+    deliver(1650);
+    const receipt=performance.now();
+    view.sample(receipt+150,.06);
+    const early=view.sample(receipt+195,.06).others[0].distance;
+    const later=view.sample(receipt+225,.03).others[0].distance;
+    assert.ok(later>early && later<=2.4);
+    const capped=view.sample(receipt+350,.10).others[0].distance;
+    assert.ok(Math.abs(capped-2.4)<.01);
+    assert.equal(view.sample(receipt+395,.045).others[0].distance,capped);
+    deliver(1650,false);
     assert.equal(view.sample(performance.now(),0).connected,false);
   } finally {
+    globalThis.performance=originalPerformance;
     if(originalWindow===undefined)delete globalThis.window;
     else globalThis.window=originalWindow;
     if(originalLocation===undefined)delete globalThis.location;

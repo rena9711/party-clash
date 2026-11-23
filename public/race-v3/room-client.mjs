@@ -3,6 +3,8 @@ import {unpackRace} from './wire.mjs';
 
 const MAX_AGE = 600;
 const INTERPOLATION_MS = 135;
+const MAX_INTERPOLATION_MS = 250;
+const MAX_EXTRAPOLATION_MS = 100;
 const SEND_INTERVAL = 65;
 const KEEPALIVE = 200;
 const interpolate = (a,b,t) => a+(b-a)*t;
@@ -11,6 +13,7 @@ const poseRate={x:10,y:10,distance:27,vx:Infinity};
 export function connectRaceView() {
   let packet, seed, track, mine, display, receivedAt, clockOffset;
   let displayedObjects, lastSent=-Infinity, sentAxis;
+  let interpolationDelay=INTERPOLATION_MS, playback=-Infinity;
   const history=[];
   const remote=new Map();
   const origin = location.origin;
@@ -34,10 +37,18 @@ export function connectRaceView() {
       remote.clear();
       display=null;
       clockOffset=undefined;
+      interpolationDelay=INTERPOLATION_MS;
+      playback=-Infinity;
     }
     const offset=now-state.now;
     // Prefer low-delay observations and slew slowly as a connection's baseline changes.
     clockOffset=clockOffset===undefined?offset:Math.min(offset,clockOffset+.5);
+    const latest=history.at(-1);
+    if(latest){
+      const gap=state.now-latest.now;
+      const desired=clamp(INTERPOLATION_MS+Math.max(0,offset-clockOffset,gap-105),INTERPOLATION_MS,MAX_INTERPOLATION_MS);
+      interpolationDelay=Math.max(desired,interpolationDelay-2);
+    }
     receivedAt=now;
     packet={state, playerId, connected};
     mine=state.runners.find(runner=>runner.id===playerId);
@@ -105,11 +116,13 @@ export function connectRaceView() {
       }
       display.objects=displayedObjects;
       others.length=0;
-      const playback=now-clockOffset-INTERPOLATION_MS;
+      playback=Math.max(playback,now-clockOffset-interpolationDelay);
       const upper=history.findIndex(frame=>frame.now>=playback);
       const next=history[upper<0?history.length-1:upper];
       const previous=history[upper<0?history.length-1:Math.max(upper-1,0)];
       const blend=clamp((playback-previous.now)/Math.max(1,next.now-previous.now),0,1);
+      const beyond=result.connected&&result.moving ? clamp(playback-next.now,0,MAX_EXTRAPOLATION_MS)/1000 : 0;
+      const earlier=history.at(-2);
       for(const runner of next.runners.values()){
         if(runner.slot===mine.slot||runner.done)continue;
         const from=previous.runners.get(runner.slot)??runner;
@@ -122,7 +135,13 @@ export function connectRaceView() {
           Object.assign(pose,runner,{runner,x,y,distance,vx});
         }
         for(const key of Object.keys(poseRate)){
-          const target=interpolate(from[key],runner[key],blend);
+          let target=interpolate(from[key],runner[key],blend);
+          if(beyond>0 && earlier){
+            const last=earlier.runners.get(runner.slot);
+            if(key==='distance' && last)
+              target+=clamp((runner.distance-last.distance)*1000/Math.max(1,next.now-earlier.now),0,23)*beyond;
+            if(key==='x')target=clamp(target+runner.vx*beyond,-BOUNDARY,BOUNDARY);
+          }
           const limit=key==='vx'?Infinity:poseRate[key]*delta;
           pose[key]+=clamp(target-pose[key],-limit,limit);
         }
