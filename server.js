@@ -37,9 +37,9 @@ function finishRace(r) {
   }
 }
 
-function newBombGame(r){const participants=[...r.players.values()].filter(p=>p.online!==false).map(p=>p.id);return {secret:1+rand(100),low:1,high:100,turn:0,order:participants,history:[],loser:null,finished:false}}
-function bombPublic(r){const b=r.bomb;if(!b)return null;return {low:b.low,high:b.high,turnId:b.order[b.turn]||null,history:b.history.slice(-12),loser:b.loser,finished:b.finished,secret:b.finished?b.secret:undefined}}
-function guessBomb(r,sid,n){const b=r.bomb;if(!b||r.phase!=='playing'||r.game!=='bomb'||b.finished||Date.now()<r.startsAt)return;if(b.order[b.turn]!==sid||!Number.isInteger(n)||n<b.low||n>b.high)return;
+function newBombGame(r){const participants=[...r.players.values()].filter(p=>p.online!==false).map(p=>p.id);return {secret:2+rand(98),low:1,high:100,turn:rand(participants.length),order:participants,history:[],loser:null,finished:false}}
+function bombPublic(r){const b=r.bomb;if(!b)return null;return {low:b.low,high:b.high,turnId:b.order[b.turn]||null,picks:b.picks,history:b.history.slice(),loser:b.loser,finished:b.finished,secret:b.finished?b.secret:undefined}}
+function guessBomb(r,sid,n){const b=r.bomb;if(!b||r.phase!=='playing'||r.game!=='bomb'||b.finished||Date.now()<r.startsAt)return;if(b.order[b.turn]!==sid||!Number.isInteger(n)||n<=b.low||n>=b.high)return;
 const p=r.players.get(sid);if(!p)return;
 if(n===b.secret){b.finished=true;b.loser=sid;b.history.push({name:p.name,id:sid,number:n,result:'boom',low:b.low,high:b.high});for(const pp of r.players.values()){pp.value=pp.id===sid?0:100;pp.submitted=true}finish(r);return}
 if(n>b.secret)b.high=n;else b.low=n;
@@ -47,27 +47,36 @@ b.history.push({name:p.name,id:sid,number:n,result:n>b.secret?'lower':'higher',l
 let next=b.turn;do{next=(next+1)%b.order.length}while(next!==b.turn&&r.players.get(b.order[next])?.online===false);b.turn=next;emit(r)
 }
 
-const SNAKE_W=26,SNAKE_H=34;
+const SNAKE_W=48,SNAKE_H=26;
 function makeSnake(r){
  const colors=['#f8bbd0','#ffe1a0','#8bd8c8','#ada6ff','#ff9e9e','#82bce8','#f8d38d','#b2e58d','#e6a5ef','#f8b9a0'];
- const players=[...r.players.values()].filter(p=>p.online!==false).map((p,i)=>({id:p.id,name:p.name,color:colors[i%colors.length],body:[],dir:{x:i%2?0:1,y:i%2?1:0},next:null,score:0,foods:0,kills:0,deaths:0,respawnAt:0,shieldUntil:0,online:true}));
+ const players=[...r.players.values()].filter(p=>p.online!==false).map((p,i)=>({id:p.id,name:p.name,color:colors[i%colors.length],body:[],dir:{x:i%2?0:1,y:i%2?1:0},next:null,score:0,foods:0,kills:0,deaths:0,respawnAt:0,shieldUntil:0,magnetUntil:0,ghostUntil:0,cooldowns:{},online:true}));
  const g={players,foods:[],width:SNAKE_W,height:SNAKE_H,step:0,last:Date.now(),lastBroadcast:0};players.forEach((p,i)=>spawnSnake(g,p,i));for(let attempt=g.foods.length;attempt<22;attempt++)addSnakeFood(g);return g
 }
 function isSnakeCellBusy(g,x,y){return g.players.some(p=>p.body.some(b=>b.x===x&&b.y===y))||g.foods.some(f=>f.x===x&&f.y===y)}
-function addSnakeFood(g){for(let t=0;t<130;t++){const x=1+rand(SNAKE_W-2),y=1+rand(SNAKE_H-2);if(!isSnakeCellBusy(g,x,y)){g.foods.push({x,y});return}}}
-function spawnSnake(g,p,i){for(let attempt=0;attempt<180;attempt++){const x=5+rand(SNAKE_W-10),y=5+rand(SNAKE_H-10),d=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}][rand(4)],body=Array.from({length:5},(_,j)=>({x:x-d.x*j,y:y-d.y*j}));if(body.every(c=>c.x>=1&&c.x<SNAKE_W-1&&c.y>=1&&c.y<SNAKE_H-1&&!isSnakeCellBusy(g,c.x,c.y))){p.body=body;p.dir=d;p.next=null;p.respawnAt=0;p.shieldUntil=Date.now()+900;return}}p.respawnAt=Date.now()+500;p.body=[]}
-function snakeSnapshot(r){const g=r.snake;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,now:Date.now(),width:g.width,height:g.height,foods:g.foods,players:g.players.map(p=>({id:p.id,name:p.name,color:p.color,body:p.body,score:p.score,foods:p.foods,kills:p.kills,deaths:p.deaths,respawnAt:p.respawnAt,shieldUntil:p.shieldUntil}))}}
+function addSnakeFood(g){for(let t=0;t<130;t++){const x=1+rand(SNAKE_W-2),y=1+rand(SNAKE_H-2);if(!isSnakeCellBusy(g,x,y)){g.foods.push({x,y,kind:['double','shield'][rand(12)]||'normal'});return}}}
+function spawnSnake(g,p,i){for(let attempt=0;attempt<180;attempt++){const x=5+rand(SNAKE_W-10),y=5+rand(SNAKE_H-10),d=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}][rand(4)],body=Array.from({length:5},(_,j)=>({x:x-d.x*j,y:y-d.y*j}));if(body.every(c=>c.x>=1&&c.x<SNAKE_W-1&&c.y>=1&&c.y<SNAKE_H-1&&!isSnakeCellBusy(g,c.x,c.y))){p.body=body;p.dir=d;p.next=null;p.doubleUntil=p.ghostUntil=p.magnetUntil=0;p.respawnAt=0;p.shieldUntil=Date.now()+900;return}}p.respawnAt=Date.now()+500;p.body=[]}
+function snakeSnapshot(r){const g=r.snake;if(!g)return null;return {startsAt:r.startsAt,endsAt:r.endsAt,now:Date.now(),width:g.width,height:g.height,foods:g.foods,players:g.players.map(p=>({id:p.id,name:p.name,color:p.color,body:p.body,score:p.score,foods:p.foods,kills:p.kills,deaths:p.deaths,respawnAt:p.respawnAt,shieldUntil:p.shieldUntil,magnetUntil:p.magnetUntil,ghostUntil:p.ghostUntil,doubleUntil:p.doubleUntil,cooldowns:p.cooldowns}))}}
 function snakeTick(r){if(r.phase!=='playing'||r.game!=='snake'||!r.snake)return;const g=r.snake,now=Date.now();if(now<r.startsAt){io.to(r.code).emit('snake-state',snakeSnapshot(r));return}
  for(const p of g.players)if(!p.body.length&&p.respawnAt&&now>=p.respawnAt&&r.players.get(p.id)?.online!==false)spawnSnake(g,p,0);
  const live=g.players.filter(p=>p.body.length);
  const moves=live.map(p=>{const d=p.next&&!(p.next.x===-p.dir.x&&p.next.y===-p.dir.y)?p.next:p.dir;p.dir=d;p.next=null;return {p,d,head:{x:p.body[0].x+d.x,y:p.body[0].y+d.y},food:null,dead:false,killer:null}});
- for(const m of moves){m.food=g.foods.find(f=>f.x===m.head.x&&f.y===m.head.y)}
+ for(const m of moves){if(m.p.magnetUntil>now)for(const f of g.foods){
+   const dx=m.head.x-f.x,dy=m.head.y-f.y,d=Math.hypot(dx,dy);
+   if(d>0&&d<7){const pull=Math.min(1,1.5/d);f.x+=dx*pull;f.y+=dy*pull}
+ }m.food=g.foods.find(f=>Math.hypot(f.x-m.head.x,f.y-m.head.y)<.85)}
  for(const m of moves){if(m.head.x<0||m.head.x>=g.width||m.head.y<0||m.head.y>=g.height){m.dead=true;continue}
- for(const other of live){if(other===m.p)continue;const hit=other.body.some(c=>c.x===m.head.x&&c.y===m.head.y);if(hit){m.dead=true;m.killer=other;break}}
+ for(const other of live){if(other===m.p||m.p.ghostUntil>now||other.ghostUntil>now)continue;const hit=other.body.some(c=>Math.hypot(c.x-m.head.x,c.y-m.head.y)<.75);if(hit){m.dead=true;m.killer=other;break}}
  }
- for(let a=0;a<moves.length;a++)for(let b=a+1;b<moves.length;b++){const x=moves[a],y=moves[b];if(x.head.x===y.head.x&&x.head.y===y.head.y){x.dead=true;y.dead=true}}
+ for(let a=0;a<moves.length;a++)for(let b=a+1;b<moves.length;b++){const x=moves[a],y=moves[b];if(x.p.ghostUntil<=now&&y.p.ghostUntil<=now&&Math.hypot(x.head.x-y.head.x,x.head.y-y.head.y)<.8){x.dead=true;y.dead=true}}
  for(const m of moves){const p=m.p;if(m.dead&&now>=p.shieldUntil){p.body=[];p.deaths++;p.score=Math.max(0,p.score-10);p.respawnAt=now+2000;if(m.killer&&m.killer!==p){m.killer.kills++;m.killer.score+=20}continue}if(m.dead){m.next=null;continue}
- p.body.unshift(m.head);const index=g.foods.indexOf(m.food);if(index>=0){g.foods.splice(index,1);p.foods++;p.score+=10}else p.body.pop();
+ if(p.doubleUntil&&p.doubleUntil<=now){p.body.splice(Math.max(2,p.body.length-p.extraLength));p.doubleUntil=0}
+ p.body.unshift(m.head);const index=g.foods.indexOf(m.food);if(index>=0){g.foods.splice(index,1);p.foods++;p.score+=10;
+ if(m.food.kind==='shield')p.shieldUntil=now+3000;
+ if(m.food.kind==='double'){
+   if(!p.doubleUntil){p.extraLength=p.body.length;p.body.push(...p.body.map(()=>({...p.body.at(-1)})))}
+   p.doubleUntil=now+3000;
+ }}else p.body.pop();
  }
  for(let attempt=g.foods.length;attempt<22;attempt++)addSnakeFood(g);
  io.to(r.code).emit('snake-state',snakeSnapshot(r));
@@ -76,22 +85,22 @@ function finishSnake(r){for(const snake of r.snake?.players||[]){const p=r.playe
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:r.game==='bomb'?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
 function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);clearInterval(r.memoryInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
 function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
-function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(100,Number(value)||0));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
+function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(r.game==='tap'?Number.MAX_SAFE_INTEGER:100,Math.floor(Number(value)||0)));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
 function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=r.game==='race'
  ? RaceV3.standings(r.race).map(runner=>r.players.get(runner.id))
  : [...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,character:r.game==='race'?p.character:undefined,value:p.value,exploded:r.game==='bomb'&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.run.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.run.distance||0):undefined,earned:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]);emit(r)}
-function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=r.game==='bomb'?newBombGame(r):null;r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
+function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=['mine','bomb'].includes(r.game)?newBombGame(r):null;if(r.game==='mine'){r.bomb.secret=1+rand(20);r.bomb.picks=0};r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
   r.race=RaceV3.createRace([...r.players.values()].filter(p=>p.online!==false),r.seed,r.startsAt);
   r.endsAt=r.race.endsAt;
 }if(r.game==='memory'){
   r.memory=MemoryTournament.create([...r.players.values()].filter(p=>p.online!==false).map(p=>p.id));
   nextMemoryTurn(r,Date.now());
-}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.race.nextBroadcast=Date.now()+100;r.raceInterval=setInterval(()=>raceTick(r),25);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
+}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.race.nextBroadcast=Date.now()+100;r.raceInterval=setInterval(()=>raceTick(r),25);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}if(r.bomb)return;r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
 function sendMemory(r, now = Date.now()) {
   io.to(r.code).emit('memory-state', MemoryTournament.snapshot(r.memory, now));
 }
@@ -128,6 +137,12 @@ function startMemory(r) {
     sendMemory(r, now);
   }, 80);
 }
+
+function startWhenReady(r){
+  const active=[...r.players.values()].filter(p=>p.online!==false);
+  if(r.phase==='rules'&&active.length>=2&&active.every(p=>p.ready))start(r,r.selectedGame);
+}
+function markOffline(r,s){const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.race)RaceV3.clearInput(r.race.runners.find(runner=>runner.id===s.id));if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.bomb&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next;r.bomb.picks=0}if(onlineCount(r)===0)roomExpiry(r);emit(r);startWhenReady(r)}
 
 const validSession=value=>typeof value==='string'&&value.length>=12&&value.length<=80?value:'';
 io.on('connection',s=>{
@@ -203,7 +218,7 @@ s.on('join',(input,ack)=>{
 });
 s.on('race-character',(character,ack)=>{
   const room=get(s),player=room?.players.get(s.id);
-  if(!player||room.phase==='playing'||room.selectedGame!=='race'||!animals.some(([id])=>id===character)){
+  if(!player||!['lobby','results'].includes(room.phase)||room.selectedGame!=='race'||!animals.some(([id])=>id===character)){
     return ack?.({error:'当前不能选择该角色'});
   }
   if([...room.players.values()].some(other=>other.id!==s.id&&other.character===character)){
@@ -215,31 +230,75 @@ s.on('race-character',(character,ack)=>{
 });
 s.on('leave-room',ack=>{
   const room=get(s);
-  if(!room||room.phase==='playing')return ack?.({error:'比赛结束后可退出房间'});
-  room.players.delete(s.id);
-  s.leave(room.code);
-  s.data.room=null;
-  if(!room.players.size){
+  if(!room)return ack?.({error:'房间已关闭'});
+  if(room.host===s.id){
     clearTimeout(room.expireTimer);
+    clearTimeout(room.timer);
+    for(const interval of [room.memoryInterval,room.snakeInterval,room.raceInterval])clearInterval(interval);
     rooms.delete(room.code);
+    s.to(room.code).emit('room-closed');
+    for(const peer of io.sockets.adapter.rooms.get(room.code)||[]){
+      const client=io.sockets.sockets.get(peer);
+      if(client){client.data.room=null;client.leave(room.code)}
+    }
     removeRoom(room.code).catch(error=>console.error('Room delete failed:',error.message));
   }else{
-    if(room.host===s.id)room.host=([...room.players.values()].find(player=>player.online!==false)||room.players.values().next().value).id;
-    if(!onlineCount(room))roomExpiry(room);
-    emit(room);
+    s.leave(room.code);
+    s.data.room=null;
+    if(room.phase==='playing')markOffline(room,s);
+    else{
+      room.players.delete(s.id);
+      if(!onlineCount(room))roomExpiry(room);
+      emit(room);startWhenReady(room);
+    }
   }
   ack?.({ok:true});
 });
-s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&r.phase!=='playing'&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
+s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&['lobby','results'].includes(r.phase)&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
 s.on('start',({game}={})=>{
   const r=get(s);
-  if(!r||r.host!==s.id||onlineCount(r)<2||r.phase==='playing')return;
+  if(!r||r.host!==s.id||onlineCount(r)<2||!['lobby','results'].includes(r.phase))return;
   const chosen=r.selectedGame||game;
   if(chosen==='race'&&[...r.players.values()].some(player=>player.online!==false&&!player.character))return;
-  start(r,chosen);
+  r.phase='rules'; r.selectedGame=chosen; r.players.forEach(p=>p.ready=false); emit(r);
+});
+s.on('rules-ready',({round}={})=>{
+  const r=get(s);
+  if(r?.phase!=='rules'||r.round!==round)return;
+  r.players.get(s.id).ready=true;
+  emit(r);startWhenReady(r);
+});
+s.on('mine-action',({cell,pass,round}={})=>{
+  const r=get(s), b=r?.bomb;
+  if(!b || r.game!=='mine' || r.round!==round || r.phase!=='playing' || Date.now()<r.startsAt || b.order[b.turn]!==s.id)return;
+  if(pass){
+    if(!b.picks)return;
+    do { b.turn=(b.turn+1)%b.order.length; } while(r.players.get(b.order[b.turn])?.online===false);
+    b.picks=0;
+  }else{
+    if(!Number.isInteger(cell)||cell<1||cell>20||b.history.some(h=>h.number===cell))return;
+    b.history.push({name:r.players.get(s.id).name,number:cell});
+    b.picks++;
+    if(cell===b.secret){
+      b.loser=s.id;b.finished=true;
+      for(const p of r.players.values())p.value=p.id===s.id?0:100;
+      return finish(r);
+    }
+  }
+  emit(r);
+});
+s.on('tap-count',({count,round}={})=>{
+ const r=get(s),p=r?.players.get(s.id);
+ if(!p||r.phase!=='playing'||r.game!=='tap'||r.round!==round||Date.now()<r.startsAt||Date.now()>r.endsAt||!Number.isSafeInteger(count))return;
+ p.value=Math.max(p.value,count);
 });
 s.on('bomb-guess',({number}={})=>{const r=get(s);if(r&&typeof number==='number')guessBomb(r,s.id,number)});
-s.on('snake-input',({x,y}={})=>{const r=get(s),p=r?.snake?.players.find(p=>p.id===s.id);if(!r||r.phase!=='playing'||r.game!=='snake'||!p||!p.body.length||Date.now()<r.startsAt)return;if(!Number.isInteger(x)||!Number.isInteger(y)||Math.abs(x)+Math.abs(y)!==1)return;if(x===-p.dir.x&&y===-p.dir.y)return;p.next={x,y}});
+s.on('snake-skill',skill=>{
+ const r=get(s),p=r?.snake?.players.find(p=>p.id===s.id),now=Date.now();
+ if(!p?.body.length||r.phase!=='playing'||r.game!=='snake'||now<r.startsAt||!['ghost','magnet'].includes(skill)||p.cooldowns[skill]>now)return;
+ p[skill+'Until']=now+4000;p.cooldowns[skill]=now+12000;
+});
+s.on('snake-input',({x,y}={})=>{const r=get(s),p=r?.snake?.players.find(p=>p.id===s.id);if(!r||r.phase!=='playing'||r.game!=='snake'||!p||!p.body.length||Date.now()<r.startsAt)return;const length=Math.hypot(x,y);if(!Number.isFinite(x)||!Number.isFinite(y)||length<0.01||length>1.5)return;x/=length;y/=length;if(x===-p.dir.x&&y===-p.dir.y)return;p.next={x,y}});
 s.on('race-input', input=>{
   const room=get(s);
   if(room?.phase==='playing'&&room.game==='race'&&room.players.has(s.id)) {
@@ -251,9 +310,9 @@ s.on('memory-answer',({attempt,index,cell}={})=>{
  if(r?.phase!=='playing'||r.game!=='memory'||!r.memory)return;
  if(MemoryTournament.answer(r.memory,s.id,attempt,index,cell,Date.now()))sendMemory(r);
 });
-s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='race'||r.game==='bomb'||r.game==='snake'||r.game==='memory'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
+s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='mine'||r.game==='race'||r.game==='bomb'||r.game==='snake'||r.game==='memory'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
 s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||(r.game==='memory'||r.game==='race')||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 启动防护盾`)}else if(t.shield){t.shield=false;s.emit('notice','对方护盾挡住了攻击');r.log.push(`${t.name} 挡住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 对 ${t.name} 使用 ${card}`)}emit(r)});
-s.on('disconnect',()=>{const r=get(s);if(!r)return;const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.race)RaceV3.clearInput(r.race.runners.find(runner=>runner.id===s.id));if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.game==='bomb'&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next}if(onlineCount(r)===0)roomExpiry(r);emit(r)})
+s.on('disconnect',()=>{const r=get(s);if(r)markOffline(r,s)});
 });
 
 // V0.6 prototype social API. No authentication: test data only; NOT secure for production/ranked use.

@@ -12,11 +12,13 @@ window.SnakeRoom = (() => {
     }
     leave();
     document.body.classList.add('snake-room-active');
-    root.innerHTML = `<main class="snake-room"><canvas aria-label="贪吃蛇游戏区域"></canvas>
+    root.innerHTML = `<main class="snake-room"><a href="/" class="snake-back">← 返回大厅</a><canvas aria-label="贪吃蛇游戏区域"></canvas>
       <div class="snake-room-stats" aria-live="off">等待同步…</div>
-      <button type="button" class="snake-stick" aria-label="拖动摇杆控制方向">●</button>
+      <div class="snake-skills"><button data-skill="magnet">磁铁</button><button data-skill="ghost">幽灵</button></div><button type="button" class="snake-stick" aria-label="拖动摇杆控制方向">●</button>
       <div class="snake-rotate">请横握手机。<button type="button" class="btn snake-full">全屏</button></div>
     </main>`;
+    root.querySelector('.snake-back').onclick=event=>{event.preventDefault();leaveRoom(true)};
+    root.querySelectorAll('[data-skill]').forEach(b=>b.onclick=()=>socket.emit('snake-skill',b.dataset.skill));
     const board = root.querySelector('canvas');
     const stick = root.querySelector('.snake-stick');
     const host = root.querySelector('.snake-room');
@@ -30,8 +32,7 @@ window.SnakeRoom = (() => {
       const length = Math.max(1, Math.hypot(x,y));
       stick.style.setProperty('--dx', Math.round(x/length*24)+'px');
       stick.style.setProperty('--dy', Math.round(y/length*24)+'px');
-      const horizontal = Math.abs(x) >= Math.abs(y);
-      const direction = {x: horizontal ? Math.sign(x) : 0, y: horizontal ? 0 : Math.sign(y)};
+      const direction = {x:x/length,y:y/length};
       const key = direction.x+','+direction.y;
       if (key !== previous) socket.emit('snake-input', direction);
       previous = key;
@@ -82,7 +83,7 @@ window.SnakeRoom = (() => {
     ctx.fillStyle='#231938';
     ctx.fillRect(0,0,state.width,state.height);
     for (const food of state.foods) {
-      ctx.fillStyle='#ffdc69';
+      ctx.fillStyle=food.kind==='double'?'#ee90ff':food.kind==='shield'?'#75faff':'#ffdc69';
       ctx.beginPath();
       ctx.arc(food.x+.5,food.y+.5,.26,0,Math.PI*2);
       ctx.fill();
@@ -91,7 +92,7 @@ window.SnakeRoom = (() => {
       ctx.fillStyle=player.color;
       player.body.forEach((cell,i) => {
         ctx.globalAlpha=i===0?1:.78;
-        ctx.fillRect(cell.x+.08,cell.y+.08,.84,.84);
+        ctx.beginPath();ctx.arc(cell.x+.5,cell.y+.5,i===0?.55:.48,0,2*Math.PI);ctx.fill();
       });
     }
     ctx.globalAlpha=1;
@@ -99,6 +100,11 @@ window.SnakeRoom = (() => {
     const now=state.now;
     const time=now<state.startsAt?'准备 '+Math.ceil((state.startsAt-now)/1000)+' 秒':
       '剩余 '+Math.max(0,(state.endsAt-now)/1000).toFixed(1)+' 秒';
+    document.querySelectorAll('[data-skill]').forEach(button=>{
+      const skill=button.dataset.skill,remaining=Math.ceil(((mine?.cooldowns?.[skill]||0)-now)/1000);
+      button.disabled=remaining>0;
+      button.textContent=(skill==='ghost'?'幽灵':'磁铁')+(remaining>0?' '+remaining+'s':'');
+    });
     const rank=[...state.players].sort((a,b)=>b.score-a.score).findIndex(p=>p.id===myId)+1;
     stats.textContent=time+' · 积分 '+(mine?.score||0)+' · 排名 '+(rank||'—')+
       (mine?.respawnAt?' · 等待重生':'');

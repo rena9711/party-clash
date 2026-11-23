@@ -71,7 +71,10 @@ async function start(game,players){
     assert.ok(all.every(result=>result.ok));
   }
   const started=until(owner.socket,'room',r=>r.phase==='playing'&&r.game===game);
+  const rules=until(owner.socket,'room',r=>r.phase==='rules');
   owner.socket.emit('start',{game});
+  const instructions=await rules;
+  for(const p of players)p.socket.emit('rules-ready',{round:instructions.round});
   await started;
   return code;
 }
@@ -269,3 +272,36 @@ for (const count of [2,5,10]) {
   });
 }
 });
+
+for(const game of ['mine','bomb']){
+  test(game+' enforces turns and shares the explosion result',{timeout:30000},async()=>{
+    const players=await Promise.all([player('甲方'),player('乙方')]);
+    let room;
+    players[0].socket.on('room',snapshot=>{room=snapshot});
+    await start(game,players);
+    await new Promise(resolve=>setTimeout(resolve,Math.max(0,room.startsAt-Date.now()+30)));
+    const act=(p,number)=>game==='mine'
+      ? p.socket.emit('mine-action',{cell:number,round:room.round})
+      : p.socket.emit('bomb-guess',{number});
+    const first=players.find(p=>p.id===room.bomb.turnId);
+    act(players.find(p=>p!==first),2);
+    if(game==='bomb'){act(first,1);act(first,100)}
+    else first.socket.emit('mine-action',{pass:true,round:room.round});
+    await new Promise(resolve=>setTimeout(resolve,100));
+    assert.equal(room.bomb.history.length,0);
+    for(let cell=1;room.phase==='playing';cell++){
+      const actor=players.find(p=>p.id===room.bomb.turnId);
+      const count=room.bomb.history.length;
+      const changed=until(players[0].socket,'room',r=>r.bomb.history.length===count+1);
+      act(actor,game==='mine'?cell:Math.floor((room.bomb.low+room.bomb.high)/2));
+      await changed;
+      if(game==='mine'&&room.phase==='playing'&&cell%2===0){
+        const passed=until(players[0].socket,'room',r=>r.bomb.turnId!==actor.id);
+        actor.socket.emit('mine-action',{pass:true,round:room.round});
+        await passed;
+      }
+    }
+    assert.equal(room.results.at(-1).id,room.bomb.loser);
+    for(const p of players)p.socket.disconnect();
+  });
+}

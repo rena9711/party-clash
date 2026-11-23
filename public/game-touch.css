@@ -26,3 +26,15 @@ body.snake-room-active{overflow:hidden;overscroll-behavior:none}
 #action-buttons{flex-wrap:wrap}
 #action-buttons .race-touch{flex-basis:100%}
 #action-buttons .race-touch button{width:54px;min-height:48px}
+
+.mine-board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:1rem 0}
+.punishment{position:fixed;inset:0;z-index:100;display:grid;place-items:center;text-align:center;background:#160d24f5;padding:1rem}
+.punishment span,.punishment strong{display:block;font-size:5rem}
+.punishment span{animation:fuse .7s both}
+.punishment strong,.punishment h2,.punishment button{animation:reveal .4s .7s both}
+@keyframes fuse{to{transform:scale(1.5);opacity:0}}
+@keyframes reveal{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){.punishment *{animation:none}}
+.snake-back{position:fixed;z-index:8;top:max(8px,env(safe-area-inset-top));left:8px;padding:.65rem;border-radius:1rem;background:#231938;color:white}
+.snake-skills{position:absolute;right:8px;top:24%;display:grid;gap:5px}
+.snake-skills button{padding:.6rem;border-radius:.7rem;background:#382b51;color:white}
