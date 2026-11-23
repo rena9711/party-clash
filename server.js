@@ -140,7 +140,7 @@ function startMemory(r) {
 
 function startWhenReady(r){
   const active=[...r.players.values()].filter(p=>p.online!==false);
-  if(r.phase==='rules'&&active.length>=2&&active.every(p=>p.ready))start(r,r.selectedGame);
+  if(r.phase==='rules'&&active.length>=1&&active.every(p=>p.ready))start(r,r.selectedGame);
 }
 function markOffline(r,s){const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.race)RaceV3.clearInput(r.race.runners.find(runner=>runner.id===s.id));if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.bomb&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next;r.bomb.picks=0}if(onlineCount(r)===0)roomExpiry(r);emit(r);startWhenReady(r)}
 
@@ -257,7 +257,7 @@ s.on('leave-room',ack=>{
 s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&['lobby','results'].includes(r.phase)&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
 s.on('start',({game}={})=>{
   const r=get(s);
-  if(!r||r.host!==s.id||onlineCount(r)<2||!['lobby','results'].includes(r.phase))return;
+  if(!r||r.host!==s.id||onlineCount(r)<1||!['lobby','results'].includes(r.phase))return;
   const chosen=r.selectedGame||game;
   if(chosen==='race'&&[...r.players.values()].some(player=>player.online!==false&&!player.character))return;
   r.phase='rules'; r.selectedGame=chosen; r.players.forEach(p=>p.ready=false); emit(r);

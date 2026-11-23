@@ -11,7 +11,7 @@ const $=x=>document.getElementById(x),G=[['tap','⚡','疯狂手速'],['precisio
   </div>
  </div>
  <div class="home-hero-art" aria-hidden="true"><div class="art-halo"></div><span class="art-star s1">✦</span><span class="art-star s2">★</span><span class="art-star s3">✧</span><div class="art-character character-left">🦊</div><div class="art-character character-main">🐰</div><div class="art-character character-right">🐼</div><div class="art-burst">GO!</div></div>
- <div class="hero-foot"><span>🎮 即开即玩</span><span>👫 2–10 人联机</span><span>🏆 实时比拼</span></div>
+ <div class="hero-foot"><span>🎮 即开即玩</span><span>👫 1–10 人房间</span><span>🏆 实时比拼</span></div>
 </section>
 <section class="panel home-games-panel">
  <div class="section home-section-title"><span>✨ 全部小游戏</span><small>随时来一局</small></div>
