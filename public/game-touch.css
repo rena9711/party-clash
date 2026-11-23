@@ -40,3 +40,5 @@ body.snake-room-active{overflow:hidden;overscroll-behavior:none}
 .snake-skills button{padding:.6rem;border-radius:.7rem;background:#382b51;color:white}
 
 .round-primary{display:block;margin:.15em 0;color:#f7b8d4;font-size:clamp(28px,7vmin,44px);line-height:1.15;font-weight:800}
+
+.mine-blast{position:fixed;inset:0;z-index:110;display:grid;align-content:center;justify-items:center;gap:12px;background:radial-gradient(circle,#973845,#2c1022 70%);color:white;font-size:24px}.mine-blast strong{font-size:clamp(72px,24vw,140px);animation:mine-burst .56s ease-out both}@keyframes mine-burst{0%{transform:scale(.2);opacity:0}65%{transform:scale(1.2);opacity:1}100%{transform:scale(1)}}@media(prefers-reduced-motion:reduce){.mine-blast strong{animation:none}}
