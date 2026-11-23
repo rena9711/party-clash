@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { layoutNameplates, raceModelScale, useDistantModel } from "../public/race-v3/presentation.mjs";
 import { advance, boost, BOOST_COOLDOWN, BOUNDARY, createRun, createTrack, DURATION, jump, PROTECTION, screenTilt, STEP, tiltInput } from '../public/race-v3/simulation.mjs';
 
 function tick(run, seconds, direction = 0) {
@@ -208,4 +209,28 @@ test('reconnect preserves consumed star identity and cannot award it again', asy
   assert.equal(runner.run.stars,1);
   assert.deepEqual(snapshotRace(race,'after',3075).consumed,[[77,null]]);
   assert.deepEqual(snapshotRace(race,'other',3075).consumed,[]);
+});
+
+test('race model scale follows roster size and distant models activate beyond 22 units', () => {
+  assert.deepEqual(Array.from({length:9},(_,i)=>raceModelScale(i+2)),
+    [1,1,.85,.85,.75,.75,.65,.65,.65]);
+  assert.equal(useDistantModel(-23),true);
+  assert.equal(useDistantModel(-22),false);
+  assert.equal(useDistantModel(25),false);
+});
+
+test('small viewports prioritize the self label and keep placed names apart', () => {
+  const crowded=Array.from({length:10},(_,id)=>({id,self:id===9,name:'玩家姓名 '+id,x:.98,y:.46,z:-id}));
+  for(const width of [320,375,393]){
+    const labels=layoutNameplates(crowded,width,760,caption=>caption.length*12);
+    assert.ok(labels.length>1);
+    assert.equal(labels[0].caption,'我 · 玩家姓名 9');
+    for(const [i,label] of labels.entries()){
+      assert.ok(label.left>=0&&label.left+label.width<=width);
+      for(const other of labels.slice(i+1)){
+        assert.ok(label.left+label.width<=other.left||other.left+other.width<=label.left||
+          label.top+19<=other.top||other.top+19<=label.top);
+      }
+    }
+  }
 });

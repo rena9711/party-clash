@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import {createAnimalFactory} from './animal-models.mjs';
+import {raceModelScale,useDistantModel} from './presentation.mjs';
 
 export function createScene(canvas) {
   const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
@@ -42,12 +43,12 @@ export function createScene(canvas) {
   const animalFactory = createAnimalFactory({batchedScene:scene});
   const models = new Map();
   const point = new T.Vector3();
-  function animal(key, character, self) {
-    const id=key+':'+(character??'fox');
+  function animal(key, character, self, distant=false) {
+    const id=key+':'+(character??'fox')+':'+distant;
     if (!models.has(id)) {
       const isolated = new T.Group();
       scene.add(isolated);
-      models.set(id, animalFactory.create(isolated,character,{self}));
+      models.set(id,distant?animalFactory.createDistant(isolated,character):animalFactory.create(isolated,character,{self}));
     }
     return models.get(id);
   }
@@ -161,17 +162,19 @@ export function createScene(canvas) {
     camera.fov=camera.aspect>1.45 ? 47 : 53;
     camera.updateProjectionMatrix();
   }
-  function render(run,time,preview,others=[]) {
+  function render(run,time,preview,others=[],rosterSize=1) {
+    const scale=preview?1:raceModelScale(rosterSize);
     city(run.distance);
     objects(run,time);
     for (const model of models.values()) model.hide();
-    animal('self',run.character,true).update(run,time,preview);
+    animal('self',run.character,true).update(run,time,preview,0,scale);
     const visible=[];
     for (const runner of others) {
       const z=run.distance-runner.distance;
       if (z < -40 || z > 6) continue;
-      animal(runner.slot,runner.character,false).update(runner,time,false,z);
-      visible.push({runner,z,self:false});
+      const distant=useDistantModel(z);
+      animal(runner.slot,runner.character,false,distant).update(runner,time,false,z,scale);
+      visible.push({runner,z,self:false,distant});
     }
     const wide=camera.aspect>1.45;
     if(preview){
@@ -181,21 +184,23 @@ export function createScene(canvas) {
       const shake=run.hit?Math.max(0,.24-(run.time-run.hit.time))*.23*Math.sin(time*78):0;
       if (run.id && !wide) {
         // Keep the full starting row in view on narrow phone screens.
-        const depth=4.45/(Math.tan(camera.fov*Math.PI/360)*camera.aspect);
-        camera.position.set(run.x*.10+shake,4.9,Math.max(8,depth));
+        const halfWidth=rosterSize>=8?4.25:3.95;
+        const depth=halfWidth/(Math.tan(camera.fov*Math.PI/360)*camera.aspect);
+        camera.position.set(run.x*.10+shake,rosterSize>=8?4.9:4.35,Math.max(8,depth));
         camera.lookAt(run.x*.08,1.05,-5.5);
       } else {
-        camera.position.set(run.x*.53+shake,wide?3.5:3.55,wide?6.85:7.75);
+        camera.position.set(run.x*.53+shake,wide?3.5:3.55,wide?(rosterSize>=8?8.1:6.85):7.75);
         camera.lookAt(run.x*.31,1.05,-8.3);
       }
     }
     animalFactory.flush();
     renderer.render(scene,camera);
     if (preview||!run.id) return [];
-    return [{runner:run,z:0,self:true},...visible].flatMap(({runner,z,self})=>{
-      point.set(runner.x,runner.y+2.40,z).project(camera);
+    return [{runner:run,z:0,self:true},...visible].flatMap(({runner,z,self,distant})=>{
+      if(distant)return [];
+      point.set(runner.x,runner.y+2.40*scale,z).project(camera);
       if(point.z < -1||point.z > 1||Math.abs(point.x)>1||Math.abs(point.y)>1)return [];
-      return [{id:runner.id,name:runner.name,slot:runner.slot,x:(point.x+1)/2,y:(1-point.y)/2,self}];
+      return [{id:runner.id,name:runner.name,z,x:(point.x+1)/2,y:(1-point.y)/2,self}];
     });
   }
   function dispose() {

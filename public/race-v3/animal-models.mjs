@@ -15,7 +15,7 @@ const profiles = {
 
 export function createAnimalFactory({batchedScene}={}) {
   const shapes={
-    ball:new T.SphereGeometry(1,10,7), cube:new T.BoxGeometry(1,1,1),
+    ball:new T.SphereGeometry(1,10,7), lowBall:new T.SphereGeometry(1,6,4), cube:new T.BoxGeometry(1,1,1),
     cone:new T.ConeGeometry(1,1,4), ring:new T.RingGeometry(.72,1,28)
   };
   const materials=new Map();
@@ -149,12 +149,14 @@ export function createAnimalFactory({batchedScene}={}) {
     }
     return {
       hide(){root.visible=false;shadow.visible=false;if(ring)ring.visible=false},
-      update(run, time, preview, z=0){
+      update(run, time, preview, z=0, scale=1){
         const phase=run.distance*1.18;
         const fly=run.y>0;
         const hit=run.hit?Math.max(0,1-(run.time-run.hit.time)/.42):0;
         const landing=Math.max(0,1-(run.time-run.landedAt)/.18);
         root.position.set(run.x,run.y+(preview ? .03*Math.sin(time*2):fly?0:Math.abs(Math.sin(phase))*.045),z);
+        root.scale.setScalar(scale);
+        shadow.scale.set(.58*scale,.012,.34*scale);
         root.rotation.set(0,preview?Math.PI+.38:-run.vx*.025,-run.vx*.023+hit*Math.sin(hit*11)*.32);
         body.scale.y=bodySize[1]*(1-landing*.13);
         head.rotation.x=preview ? .04*Math.sin(time*2):fly?-.14:hit*.29;
@@ -164,12 +166,46 @@ export function createAnimalFactory({batchedScene}={}) {
         root.visible=preview||run.time>=run.protectedUntil||hit>0||Math.floor(run.time*11)%2===0;
         shadow.visible=true;
         shadow.position.set(run.x,.018,z);
-        if(ring){ring.visible=!preview;ring.position.set(run.x,.035,z)}
+        if(ring){ring.visible=!preview;ring.position.set(run.x,.035,z);ring.scale.set(.63*scale,.49*scale,1)}
       }
     };
   }
+  function createDistant(parent, requested) {
+    const profile=profiles[requested]??profiles.fox;
+    const root=new T.Group();
+    parent.add(root);
+    const {coat,fur,trim,body,head}=profile;
+    mesh(root,'lowBall',coat,0,.86,0,...body);
+    mesh(root,'lowBall',fur,0,1.49,-.13,...head);
+    if(requested==='lion')mesh(root,'lowBall','#ad622e',0,1.47,.04,.51,.46,.17);
+    if(requested!=='penguin'){
+      const pointed=['fox','cat','pig'].includes(requested);
+      for(const side of [-1,1]){
+        const rabbit=requested==='rabbit';
+        const frog=requested==='frog';
+        mesh(root,pointed?'cone':'lowBall',requested==='panda'?trim:fur,side*.28,
+          rabbit?1.96:frog?1.73:1.79,-.10,.12,rabbit ? .31 : pointed ? .30:.13,.10);
+      }
+    }
+    const legs=[-1,1].map(side=>mesh(root,'cube',coat,side*.17,.32,0,.17,.44,.17));
+    const feet=[-1,1].map(side=>mesh(root,'cube','#f3e6f4',side*.17,.09,-.08,.22,.13,.33));
+    return {
+      hide(){root.visible=false},
+      update(run,_time,_preview,z,scale){
+        root.visible=true;
+        root.position.set(run.x,run.y,z);
+        root.scale.setScalar(scale);
+        for(let i=0;i<2;i++){
+          const stride=run.y>0?0:Math.sin(run.distance*1.18+i*Math.PI)*.17;
+          feet[i].position.z=-.08+stride;
+          legs[i].rotation.x=stride*2;
+        }
+      }
+    };
+  }
+
   return {
-    create,
+    create, createDistant,
     flush(){
       if(!batchedScene)return;
       batchedScene.updateMatrixWorld(true);

@@ -1,4 +1,5 @@
 import '../player-identity.js';
+import {layoutNameplates} from './presentation.mjs';
 import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs';
 
 const get = id => document.getElementById(id);
@@ -8,6 +9,8 @@ const multiplayer = new URLSearchParams(location.search).get('mode') === 'room' 
 let network, lastSent = -Infinity, roomState, roomHealth, roomStars;
 const roomNotice = get('room-status');
 const nameplates=new Map();
+const labelMetrics=document.createElement('canvas').getContext('2d');
+labelMetrics.font='11.52px system-ui';
 let leaderboardKey='';
 
 let view;
@@ -20,6 +23,7 @@ let previewTime = 0;
 let sensorAccepted = false;
 let permissionDenied = false;
 let nextReading = null;
+let rotationPending = false;
 let starting = false;
 let baseline = null;
 let filtered = 0;
@@ -31,10 +35,10 @@ const keys = new Set();
 const touches = new Map();
 
 function angle() {
-  return screen.orientation?.angle ?? Number(window.orientation || 0);
+  return ((screen.orientation?.angle ?? Number(window.orientation || 0))%360+360)%360;
 }
 function updateControls() {
-  get('controls').hidden = mode !== 'running' || baseline !== null || (multiplayer && Boolean(roomState?.run?.done));
+  get('controls').hidden = mode !== 'running' || baseline !== null || rotationPending || (multiplayer && Boolean(roomState?.run?.done));
 }
 function show(next) {
   mode = next;
@@ -42,6 +46,7 @@ function show(next) {
   get('hud').hidden = next !== 'running';
   get('room-leaderboard').hidden = !multiplayer || next !== 'running';
   get('nameplates').hidden = !multiplayer || next !== 'running';
+  get('orientation-calibration').hidden=next!=='running'||!rotationPending;
   if (next==='paused'||next==='error') roomNotice.hidden=true;
   updateControls();
 }
@@ -56,26 +61,47 @@ function readSensor(event) {
   }
   if (baseline === null) return;
   if (screenAngle !== orientation) {
-    screenAngle = orientation;
-    baseline = value;
-    filtered = 0;
+    recalibrateOrientation();
+    return;
   }
   rawAngle = value;
 }
-function firstReading() {
+function firstReading(settle=0) {
   return new Promise(resolve => {
+    let currentAngle=angle();
+    let acceptAfter=performance.now()+settle;
     const finish = reading => {
       clearTimeout(timer);
       nextReading = null;
       resolve(reading);
     };
     const timer = setTimeout(()=>finish(null),2000);
-    nextReading = finish;
+    nextReading = reading => {
+      const now=performance.now();
+      if (reading.orientation!==currentAngle) {
+        currentAngle=reading.orientation;
+        acceptAfter=now+150;
+      }
+      if(now>=acceptAfter)finish(reading);
+    };
   });
 }
+function applyReading(reading) {
+  screenAngle=reading?.orientation??null;
+  baseline=rawAngle=reading?.value??null;
+  filtered=0;
+}
+async function recalibrateOrientation() {
+  if (baseline===null || screenAngle===angle() || starting || rotationPending) return;
+  rotationPending=true;
+  applyReading(null);
+  network?.input({axis:0});
+  applyReading(await firstReading(150));
+  rotationPending=false;
+  updateControls();
+}
 async function prepareSensor() {
-  baseline = rawAngle = screenAngle = null;
-  filtered = 0;
+  applyReading(null);
   const Orientation = window.DeviceOrientationEvent;
   if (!Orientation || !window.isSecureContext || permissionDenied) return;
   try {
@@ -86,11 +112,7 @@ async function prepareSensor() {
       }
     }
     sensorAccepted = true;
-    const reading = await firstReading();
-    if (reading) {
-      screenAngle = reading.orientation;
-      baseline = rawAngle = reading.value;
-    }
+    applyReading(await firstReading());
   } catch {
     // A browser-level permission error still leaves touch controls available.
   }
@@ -110,6 +132,20 @@ async function startWithControls(event) {
   starting = false;
   play();
   if (document.hidden) pause();
+}
+async function recalibrateManually() {
+  if(starting||rotationPending)return;
+  starting=true;
+  const button=get('recalibrate');
+  const status=get('calibration-status');
+  button.disabled=true;
+  get('resume').disabled=true;
+  status.textContent='请保持当前握姿，正在校准…';
+  await prepareSensor();
+  status.textContent=baseline===null?'感应器不可用。继续比赛可使用触控方向键。':'校准完成。当前握姿已设为中位。';
+  button.disabled=false;
+  get('resume').disabled=false;
+  starting=false;
 }
 function resetInput() {
   keys.clear();
@@ -179,12 +215,14 @@ function frame(now) {
   lastFrame=now;
   if (mode==='running') {
     const previousHealth=run.health, previousStars=run.stars;
+    if (baseline!==null && angle()!==screenAngle) recalibrateOrientation();
+    get('orientation-calibration').hidden=!rotationPending;
     if (baseline !== null && rawAngle !== null) {
       const sample=clamp(rawAngle-baseline,-70,70);
       filtered+=(sample-filtered)*(1-Math.exp(-delta*17));
     }
     const keyboard=Number(keys.has('ArrowRight'))-Number(keys.has('ArrowLeft'));
-    const direction=keyboard || (baseline===null ? touchAxis : tiltInput(filtered,settings.value));
+    const direction=keyboard || (rotationPending ? 0 : baseline===null ? touchAxis : tiltInput(filtered,settings.value));
     if (multiplayer) {
       renderRoom(now,delta,direction);
       schedule();
@@ -239,7 +277,7 @@ function renderRoom(now, delta, direction) {
   get('boost').disabled=cooldown>0 || !state.connected || !state.moving;
   updateHud(Math.max(0,(state.endsAt-Math.max(state.clock,state.startsAt))/1000));
   updateControls();
-  renderNameplates(view.render(run,run.time,false,state.others));
+  renderNameplates(view.render(run,run.time,false,state.others,state.runners.length));
   updateLeaderboard(state.runners);
 }
 function updateLeaderboard(runners) {
@@ -256,7 +294,8 @@ function updateLeaderboard(runners) {
 }
 function renderNameplates(labels) {
   const visible=new Set();
-  for(const label of labels){
+  const placed=layoutNameplates(labels,canvas.clientWidth,canvas.clientHeight,text=>labelMetrics.measureText(text).width);
+  for(const label of placed){
     visible.add(label.id);
     let node=nameplates.get(label.id);
     if(!node){
@@ -265,13 +304,9 @@ function renderNameplates(labels) {
       nameplates.set(label.id,node);
     }
     node.classList.toggle('self',label.self);
-    node.classList.toggle('staggered',!label.self&&label.slot%2===1);
-    node.classList.toggle('left-edge',label.x<.13);
-    node.classList.toggle('right-edge',label.x>.87);
-    const text=(label.self?'我 · ':'')+label.name;
-    if(node.textContent!==text)node.textContent=text;
-    node.style.left=label.x*100+'%';
-    node.style.top=label.y*100+'%';
+    if(node.textContent!==label.caption)node.textContent=label.caption;
+    node.style.transform='translate('+label.left+'px,'+label.top+'px)';
+    node.style.width=label.width+'px';
   }
   for(const [id,node] of nameplates)if(!visible.has(id)){node.remove();nameplates.delete(id)}
 }
@@ -289,7 +324,7 @@ if (multiplayer) {
   const {connectRaceView} = await import('./room-client.mjs');
   network=connectRaceView();
   get('start').textContent='进入比赛';
-  get('mode').textContent='进入时自动校准；无感应器时可触控。比赛按房间时间开始。';
+  get('mode').textContent='进入时请自然握住手机，当前角度会自动设为中位。无感应器时使用左右键。比赛按房间时间开始。';
   get('rank').hidden=false;
   get('boost').hidden=false;
   get('reset').hidden=true;
@@ -306,7 +341,7 @@ function intro() {
 function resize() {
   if (!view) return;
   view.resize(Math.max(1,canvas.clientWidth),Math.max(1,canvas.clientHeight));
-  view.render(run,mode==='intro'?previewTime:run.time,mode==='intro');
+  view.render(run,mode==='intro'?previewTime:run.time,mode==='intro',roomState?.others,roomState?.runners?.length);
 }
 function refreshTouch() {
   touchAxis=clamp([...touches.values()].reduce((sum,value)=>sum+value,0),-1,1);
@@ -318,6 +353,7 @@ get('back').onclick=intro;
 get('pause').onclick=pause;
 get('reset').onclick=intro;
 get('resume').onclick=()=>{show('running');schedule();};
+get('recalibrate').onclick=recalibrateManually;
 get('jump').onclick=()=>performAction('jump');
 get('boost').onclick=()=>performAction('boost');
 for(const [id,direction] of [['left',-1],['right',1]]) {
@@ -359,6 +395,8 @@ window.addEventListener('keyup',event=>keys.delete(event.key));
 window.addEventListener('blur',resetInput);
 window.addEventListener('deviceorientation',readSensor);
 window.addEventListener('resize',resize);
+window.addEventListener('orientationchange',recalibrateOrientation);
+screen.orientation?.addEventListener?.('change',recalibrateOrientation);
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden) {pause();stopFrames();}
   else schedule();

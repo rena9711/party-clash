@@ -21,6 +21,7 @@
     </div>
     <div id="nameplates" hidden></div>
     <details id="room-leaderboard" hidden><summary>排行榜</summary><ol id="room-leaderboard-list"></ol></details>
+    <p id="orientation-calibration" hidden role="status">屏幕已旋转，请保持握姿，正在重新校准…</p>
     <p id="room-status" hidden role="status"></p>
     <div id="effect" aria-hidden="true" data-kind=""></div>
     <div id="pickup" aria-hidden="true">+1 ⭐</div>
@@ -31,7 +32,7 @@
     </div>
     <section id="intro" class="sheet">
       <h1>跑得快</h1>
-      <p>左右倾斜手机移动，向上滑动跳跃</p>
+      <p>左倾向左，右倾向右，回正停止。向上滑动跳跃。</p>
       <p id="mode">开始时自动校准；无感应器时可用触控方向键。</p>
       <div class="settings">
         <label>灵敏度 <select id="sensitivity"><option value="low">低</option><option value="medium" selected>中</option><option value="high">高</option></select></label>
@@ -41,6 +42,9 @@
     </section>
     <section id="paused" class="sheet compact" hidden>
       <h2>游戏暂停</h2>
+      <p>自然握住手机后重新校准。左倾向左，右倾向右；无感应器时用左右键。</p>
+      <p id="calibration-status" role="status"></p>
+      <button id="recalibrate" type="button">重新校准</button>
       <button id="resume" class="primary" type="button">继续游戏</button>
       <p id="race-paused-status" hidden>比赛照常进行。</p>
       <button id="reset" type="button">返回设置</button>
