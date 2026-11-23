@@ -30,7 +30,14 @@ const labelWidths=new Map();
 let labelsAt=-Infinity;
 
 let view;
-let run = createRun();
+const characterPicker=get('solo-character');
+get('solo-character-label').hidden=multiplayer;
+if(!multiplayer){
+ for(const [id,icon,name] of PartyIdentity.animals)characterPicker.add(new Option(icon+' '+name,id));
+ characterPicker.onchange=()=>{run.character=characterPicker.value};
+}
+function newRun(){const run=createRun();if(!multiplayer)run.character=characterPicker.value;return run}
+let run = newRun();
 let mode = 'intro';
 let frameId = 0;
 let lastFrame = null;
@@ -173,7 +180,7 @@ function resetInput() {
 }
 function play() {
   if (!multiplayer) {
-    run=createRun();
+    run=newRun();
     if(createDiagnostics){
       diagnostics.dispose();
       diagnostics=createDiagnostics({city:cityMode,multiplayer});
@@ -389,7 +396,7 @@ if (multiplayer) {
   get('error').querySelector('a').hidden=true;
 }
 function intro() {
-  run=createRun();
+  run=newRun();
   lastFrame=null;
   show('intro');
   schedule();
