@@ -185,7 +185,7 @@ export function createScene(canvas) {
     group.visible=false;
     return group;
   }
-  const pools=Object.fromEntries([['bomb',5],['hurdle',5],['star',12]].map(([kind,length])=>
+  const pools=Object.fromEntries([['bomb',5],['hurdle',5],['star',24]].map(([kind,length])=>
     [kind,Array.from({length},()=>buildObstacle(kind))]));
   const sparks = Array.from({length:12},()=>mesh(scene,oct,paint.gold,0,0,0,.12,.12,.12));
   function objects(run, time) {

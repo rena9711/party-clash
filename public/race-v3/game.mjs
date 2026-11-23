@@ -2,7 +2,6 @@ import { advance, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp 
 
 const get = id => document.getElementById(id);
 const canvas = get('scene');
-const modeLabel = get('mode');
 const settings = get('sensitivity');
 
 let view;
@@ -13,8 +12,9 @@ let lastFrame = null;
 let timeDebt = 0;
 let previewTime = 0;
 let sensorAccepted = false;
-let calibrating = false;
-let calibrationTimer;
+let permissionDenied = false;
+let nextReading = null;
+let starting = false;
 let baseline = null;
 let filtered = 0;
 let screenAngle = null;
@@ -24,9 +24,6 @@ let touchAxis = 0;
 const keys = new Set();
 const touches = new Map();
 
-function message(text) {
-  modeLabel.textContent = text;
-}
 function angle() {
   return screen.orientation?.angle ?? Number(window.orientation || 0);
 }
@@ -39,57 +36,71 @@ function show(next) {
   get('hud').hidden = next !== 'running';
   updateControls();
 }
-function fallback(reason) {
-  baseline = null;
-  filtered = 0;
-  calibrating = false;
-  clearTimeout(calibrationTimer);
-  get('calibrate').disabled = false;
-  updateControls();
-  message(reason + '。可用触控方向键移动');
-}
 function readSensor(event) {
   if (!sensorAccepted) return;
   const orientation = angle();
   const value = screenTilt(event.beta,event.gamma,orientation);
   if (value === null) return;
-  if (calibrating || screenAngle !== orientation) {
+  if (nextReading) {
+    nextReading({ orientation, value });
+    return;
+  }
+  if (baseline === null) return;
+  if (screenAngle !== orientation) {
     screenAngle = orientation;
     baseline = value;
     filtered = 0;
-    calibrating = false;
-    clearTimeout(calibrationTimer);
-    get('calibrate').disabled = false;
-    updateControls();
-    message('重力感应已校准。左右倾斜移动');
   }
   rawAngle = value;
 }
-async function calibrate() {
+function firstReading() {
+  return new Promise(resolve => {
+    const finish = reading => {
+      clearTimeout(timer);
+      nextReading = null;
+      resolve(reading);
+    };
+    const timer = setTimeout(()=>finish(null),2000);
+    nextReading = finish;
+  });
+}
+async function prepareSensor() {
+  baseline = rawAngle = screenAngle = null;
+  filtered = 0;
   const Orientation = window.DeviceOrientationEvent;
-  if (!Orientation || !window.isSecureContext) {
-    fallback('当前设备或连接无法使用重力感应');
-    return;
-  }
-  const button = get('calibrate');
-  button.disabled = true;
+  if (!Orientation || !window.isSecureContext || permissionDenied) return;
   try {
     if (!sensorAccepted && typeof Orientation.requestPermission === 'function') {
-      const permission = await Orientation.requestPermission();
-      if (permission !== 'granted') {
-        fallback('重力感应未获授权');
+      if (await Orientation.requestPermission() !== 'granted') {
+        permissionDenied = true;
         return;
       }
     }
     sensorAccepted = true;
-    calibrating = true;
-    rawAngle = null;
-    message('请自然握住手机，正在读取感应器…');
-    clearTimeout(calibrationTimer);
-    calibrationTimer = setTimeout(()=>fallback('未收到感应器数据'),2000);
+    const reading = await firstReading();
+    if (reading) {
+      screenAngle = reading.orientation;
+      baseline = rawAngle = reading.value;
+    }
   } catch {
-    fallback('无法读取重力感应权限');
+    // A browser-level permission error still leaves touch controls available.
   }
+}
+async function startWithControls(event) {
+  if (starting) return;
+  starting = true;
+  const button = event.currentTarget;
+  const label = button.textContent;
+  button.disabled = true;
+  get('back').disabled = true;
+  button.textContent = '正在读取重力感应…';
+  await prepareSensor();
+  button.textContent = label;
+  button.disabled = false;
+  get('back').disabled = false;
+  starting = false;
+  play();
+  if (document.hidden) pause();
 }
 function resetInput() {
   keys.clear();
@@ -194,9 +205,8 @@ function refreshTouch() {
   touchAxis=clamp([...touches.values()].reduce((sum,value)=>sum+value,0),-1,1);
 }
 
-get('calibrate').onclick=calibrate;
-get('start').onclick=play;
-get('again').onclick=play;
+get('start').onclick=startWithControls;
+get('again').onclick=startWithControls;
 get('back').onclick=intro;
 get('pause').onclick=pause;
 get('reset').onclick=intro;

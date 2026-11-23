@@ -39,8 +39,14 @@ function spawnWave(run) {
   const x = (run.random() * 2 - 1) * 2.35;
   const at = run.nextDistance;
   const side = x < 0 ? 1 : -1;
+  const trailX = side * (1.55 + run.random() * 1.25);
+  // Lead-in stars stay away from the obstacle silhouette. The last
+  // hurdle star is high enough for the jump arc and out of ground reach.
+  for (let i = 0; i < 3; i++) {
+    const lateral = kind === 'hurdle' ? trailX * (1 - i * .16) : trailX;
+    run.objects.push({ kind: 'star', x: lateral, at: at - 14 + i * 3.5, y: .65 });
+  }
   run.objects.push({ kind, x, at, height: kind === 'bomb' ? .85 : .74, width: kind === 'bomb' ? 1.05 : 2.55 });
-  run.objects.push({ kind: 'star', x: side * (1.35 + run.random() * 1.75), at: at - 4, y: .65 });
   if (kind === 'hurdle') run.objects.push({ kind: 'star', x, at, y: 1.55 });
   run.nextDistance += Math.max(19, 27 - run.time * .19) + run.random() * 5;
 }

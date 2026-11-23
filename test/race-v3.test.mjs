@@ -107,7 +107,7 @@ test('successive obstacle waves reserve a bypass and repeated complete runs keep
       for(const object of run.objects){
         if(object.kind!=='star')seen.set(object.at,object);
       }
-      assert.ok(run.objects.length<=18);
+      assert.ok(run.objects.length<=24);
     }
     const waves=[...seen.values()];
     for(let i=0;i<waves.length;i++){
@@ -120,4 +120,41 @@ test('successive obstacle waves reserve a bypass and repeated complete runs keep
       }
     }
   }
+});
+
+test('denser waves have three separated ground stars and one additional reachable hurdle star', () => {
+  for (const sample of [0, .5, .999]) {
+    const run = createRun(() => sample);
+    advance(run, STEP, 0);
+    const waves = run.objects.filter(item => item.kind !== 'star');
+    assert.ok(waves.length >= 2);
+    let previous = -Infinity;
+    let total = 0;
+    let previousDensity = 0;
+    for (const obstacle of waves) {
+      const stars = run.objects.filter(item => item.kind === 'star' && item.at > previous && item.at <= obstacle.at);
+      const ground = stars.filter(item => item.y < 1);
+      assert.equal(ground.length, 3);
+      assert.deepEqual(ground.map(item => obstacle.at - item.at), [14, 10.5, 7]);
+      assert.ok(ground.every(item => Math.abs(item.x) <= BOUNDARY && item.y === .65));
+      assert.ok(ground.every((item,i) => i===0 || Math.abs(item.x-ground[i-1].x) <= .45));
+      const elevated = stars.find(item => item.y >= 1);
+      if (obstacle.kind === 'hurdle') {
+        assert.ok(elevated && elevated.y - .38 > obstacle.height);
+        assert.equal(elevated.x, obstacle.x);
+        assert.equal(elevated.at, obstacle.at);
+      } else {
+        assert.equal(elevated, undefined);
+      }
+      total += stars.length;
+      previousDensity += obstacle.kind === 'hurdle' ? 2 : 1;
+      previous = obstacle.at;
+    }
+    assert.ok(total / previousDensity >= 2 && total / previousDensity <= 3);
+  }
+  const trail = createRun(() => .5);
+  trail.x = -(1.55 + .5 * 1.25);
+  tick(trail, 1.6);
+  assert.equal(trail.stars, 3);
+  assert.equal(trail.health, 3);
 });
