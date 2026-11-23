@@ -389,7 +389,10 @@ export function createAnimalFactory({batchedScene}={}) {
     create, createDistant,
     flush(){
       if(!batchedScene)return;
-      for(const parent of parents)parent.updateWorldMatrix(true,true);
+      for(const parent of parents){
+        if(parent.parent)parent.parent.updateWorldMatrix(true,false);
+        parent.traverseVisible(node=>node.updateWorldMatrix(false,false));
+      }
       for(const group of batches.values()){
         group.batch.count=0;
         group.colorDirty=false;

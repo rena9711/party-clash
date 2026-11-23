@@ -47,7 +47,6 @@ export function createScene(canvas) {
     const id=key+':'+(character??'fox')+':'+distant;
     if (!models.has(id)) {
       const isolated = new T.Group();
-      scene.add(isolated);
       models.set(id,distant?animalFactory.createDistant(isolated,character):animalFactory.create(isolated,character,{self}));
     }
     return models.get(id);
@@ -64,38 +63,50 @@ export function createScene(canvas) {
     pose.updateMatrix();
     batch.setMatrixAt(index,pose.matrix);
   }
+  const cityGroup=new T.Group();
+  scene.add(cityGroup);
   function batch(coat,count) {
     const result = new T.InstancedMesh(box,coat,count);
     result.frustumCulled=false;
-    scene.add(result);
+    cityGroup.add(result);
     return result;
   }
-  const buildings= batch(paint.tower,tileCount*4);
-  const windows= batch(paint.violet,tileCount*8);
-  const blue= batch(paint.cyan,tileCount*5);
-  const pink= batch(paint.pink,tileCount*4);
-  const lines= batch(paint.dim,tileCount*3);
+  const buildings=batch(paint.tower,tileCount*4);
+  const lightsMaterial=new T.MeshBasicMaterial();
+  const lights=batch(lightsMaterial,tileCount*20);
+  // Each tile has eight windows, five cyan lights, four pink lights and three lane markings.
+  for(let i=0;i<tileCount;i++){
+    for(const [start,length,color] of [[0,8,paint.violet.color],[8,5,paint.cyan.color],[13,4,paint.pink.color],[17,3,paint.dim.color]]){
+      for(let index=start;index<start+length;index++)lights.setColorAt(i*20+index,color);
+    }
+  }
+  let cityBase;
   function city(distance) {
     const base=Math.floor(distance/tileLength);
+    cityGroup.position.z=distance-base*tileLength;
+    if(base===cityBase)return;
+    cityBase=base;
     for(let i=0;i<tileCount;i++){
       const tile=base+i-1;
-      const z=distance-tile*tileLength;
+      const z=(1-i)*tileLength;
+      const lightIndex=i*20;
       for(let s=0;s<2;s++){
         const side=s===0?-1:1;
         const h=4+((tile*17+s*7)%11+11)%11*.66;
         const index=i*4+s*2;
         instance(buildings,index,side*6.7,h/2,z,3.1,h,5.15);
         instance(buildings,index+1,side*10.2,h*.61,z-5,3.6,h*1.22,5.6);
-        for(let j=0;j<4;j++) instance(windows,i*8+s*4+j,side*5.13,1.7+j*(h-2)/4,z,.04,.09,3.8);
-        instance(blue,i*5+s,side*4.16,.02,z,.09,.035,11.8);
-        instance(blue,i*5+s+2,side*5.1,h*.91,z,.06,.20,1.8);
-        instance(pink,i*4+s,side*4.47,.03,z-2,.17,.05,3.7);
-        instance(pink,i*4+s+2,side*9,h*1.18,z-4,.16,.16,2.6);
+        for(let j=0;j<4;j++)instance(lights,lightIndex+s*4+j,side*5.13,1.7+j*(h-2)/4,z,.04,.09,3.8);
+        instance(lights,lightIndex+8+s,side*4.16,.02,z,.09,.035,11.8);
+        instance(lights,lightIndex+10+s,side*5.1,h*.91,z,.06,.20,1.8);
+        instance(lights,lightIndex+13+s,side*4.47,.03,z-2,.17,.05,3.7);
+        instance(lights,lightIndex+15+s,side*9,h*1.18,z-4,.16,.16,2.6);
       }
-      instance(blue,i*5+4,0,.009,z,.08,.025,2.8);
-      for(let j=0;j<3;j++) instance(lines,i*3+j,0,.005,z-j*3.4,7.8,.021,.045);
+      instance(lights,lightIndex+12,0,.009,z,.08,.025,2.8);
+      for(let j=0;j<3;j++)instance(lights,lightIndex+17+j,0,.005,z-j*3.4,7.8,.021,.045);
     }
-    for(const group of [buildings,windows,blue,pink,lines])group.instanceMatrix.needsUpdate=true;
+    buildings.instanceMatrix.needsUpdate=true;
+    lights.instanceMatrix.needsUpdate=true;
   }
 
   const starShape = new T.Shape();
