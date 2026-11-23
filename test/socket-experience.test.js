@@ -189,18 +189,20 @@ test('identity validation, atomic character reservation, start gate, and release
   const stillLobby=until(loser.socket,'room',r=>r.phase==='lobby');
   assert.equal((await ack(loser,'race-character','rabbit')).ok,true);
   await stillLobby;
-  assert.equal((await loser.socket.timeout(5000).emitWithAck('leave-room')).ok,true);
+  const hostCharacter=winner===a?'fox':'rabbit';
+  const guestCharacter=winner===a?'rabbit':'fox';
+  assert.equal((await b.socket.timeout(5000).emitWithAck('leave-room')).ok,true);
   await request(c,'join',{code});
-  assert.equal((await ack(c,'race-character','rabbit')).ok,true);
-  winner.socket.disconnect();
-  const again=await player(winner.name,winner.session);
-  const originalName=winner===a?'狐狸甲':'👨‍👩‍👧‍👦'.repeat(12);
-  const reconnected=until(again.socket,'room',r=>r.players.some(p=>p.name===originalName&&p.character==='fox'));
+  assert.equal((await ack(c,'race-character',guestCharacter)).ok,true);
+  a.socket.disconnect();
+  const again=await player(a.name,a.session);
+  const originalName='狐狸甲';
+  const reconnected=until(again.socket,'room',r=>r.players.some(p=>p.name===originalName&&p.character===hostCharacter));
   await request(again,'join',{code,resume:true,name:'不能覆盖原昵称'});
   const state=await reconnected;
   assert.equal(state.players.length,2);
   assert.equal(state.players.find(p=>p.id===again.id).name,originalName);
-  assert.equal(state.players.find(p=>p.id===c.id).character,'rabbit');
+  assert.equal(state.players.find(p=>p.id===c.id).character,guestCharacter);
 });
 for (const count of [2,5,10]) {
   test('3D race synchronizes '+count+' players, reconnects and settles once', {timeout:62000},async()=>{
