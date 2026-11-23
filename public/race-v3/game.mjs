@@ -265,6 +265,7 @@ function renderNameplates(labels) {
       nameplates.set(label.id,node);
     }
     node.classList.toggle('self',label.self);
+    node.classList.toggle('staggered',!label.self&&label.slot%2===1);
     node.classList.toggle('left-edge',label.x<.13);
     node.classList.toggle('right-edge',label.x>.87);
     const text=(label.self?'我 · ':'')+label.name;

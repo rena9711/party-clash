@@ -195,7 +195,7 @@ export function createScene(canvas) {
     return [{runner:run,z:0,self:true},...visible].flatMap(({runner,z,self})=>{
       point.set(runner.x,runner.y+2.40,z).project(camera);
       if(point.z < -1||point.z > 1||Math.abs(point.x)>1||Math.abs(point.y)>1)return [];
-      return [{id:runner.id,name:runner.name,x:(point.x+1)/2,y:(1-point.y)/2,self}];
+      return [{id:runner.id,name:runner.name,slot:runner.slot,x:(point.x+1)/2,y:(1-point.y)/2,self}];
     });
   }
   function dispose() {
