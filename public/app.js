@@ -16,7 +16,8 @@ function emitAck(event,data,userInitiated=true){
   myId=res.id;
   if(res.code){
    localStorage.setItem('clash-room-'+res.code,'joined');
-   history.replaceState({},'', '/multiplayer.html?room='+encodeURIComponent(res.code));
+   const roomUrl='/multiplayer.html?room='+encodeURIComponent(res.code);
+   history.replaceState({},'', window.RaceMulti?.route(roomUrl)??roomUrl);
   }
   if(event==='create'&&['race','bomb','snake'].includes(requestedGame))socket.emit('select-game',{game:requestedGame});
   if(room)showRoom();
@@ -56,7 +57,7 @@ function leaveRoom(){
  socket.timeout(3500).emit('leave-room',(error,result)=>{
   if(error||!result?.ok){alert(result?.error||'连接失败，请重试');return}
   localStorage.removeItem('clash-room-'+room.code);
-  history.replaceState({},'', '/multiplayer.html');
+  history.replaceState({},'', window.RaceMulti?.route('/multiplayer.html')??'/multiplayer.html');
   room=null;myId=null;config=null;home();
  });
 }

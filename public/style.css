@@ -49,3 +49,8 @@ header .pill{flex:none;white-space:nowrap}
 .character-preview img{display:block;width:100%;height:100%;object-fit:contain}
 #character-feedback{font-size:.87rem;min-height:1.3em}
 #leave-room{margin-top:6px}
+
+.race-diagnostics-result{position:fixed;z-index:30;left:max(8px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom));max-width:calc(100% - 16px);padding:8px 12px;border:1px solid #896bb4;border-radius:10px;background:#211337f5;color:#fff;font-size:.8rem}
+.race-diagnostics-result summary{cursor:pointer}
+.race-diagnostics-result p{margin:6px 0}
+.race-diagnostics-result button{margin:2px 6px 2px 0;padding:5px 9px;background:#462e6a;color:#fff;border:1px solid #896bb4;border-radius:6px}

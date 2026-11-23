@@ -2,7 +2,7 @@ import * as T from './vendor/three.module.min.js';
 import {createAnimalFactory} from './animal-models.mjs';
 import {raceModelScale,useDistantModel} from './presentation.mjs';
 
-export function createScene(canvas) {
+export function createScene(canvas,{cityMode="optimized",diagnostics=null}={}) {
   const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
   renderer.setClearColor('#130d29');
   renderer.outputColorSpace = T.SRGBColorSpace;
@@ -72,41 +72,52 @@ export function createScene(canvas) {
     return result;
   }
   const buildings=batch(paint.tower,tileCount*4);
-  const lightsMaterial=new T.MeshBasicMaterial();
-  const lights=batch(lightsMaterial,tileCount*20);
-  // Each tile has eight windows, five cyan lights, four pink lights and three lane markings.
-  for(let i=0;i<tileCount;i++){
-    for(const [start,length,color] of [[0,8,paint.violet.color],[8,5,paint.cyan.color],[13,4,paint.pink.color],[17,3,paint.dim.color]]){
-      for(let index=start;index<start+length;index++)lights.setColorAt(i*20+index,color);
+  const legacy=cityMode==='legacy';
+  const palette=[[0,8,paint.violet],[8,5,paint.cyan],[13,4,paint.pink],[17,3,paint.dim]];
+  const lights=legacy?null:batch(new T.MeshBasicMaterial(),tileCount*20);
+  const legacyMap=[];
+  const lightBatches=legacy?palette.map(([start,count,material])=>{
+    const group=batch(material,tileCount*count);
+    for(let i=0;i<count;i++)legacyMap[start+i]={group,count,index:i};
+    return group;
+  }):[lights];
+  if(lights)for(let i=0;i<tileCount;i++){
+    for(const [start,length,material] of palette){
+      for(let index=start;index<start+length;index++)lights.setColorAt(i*20+index,material.color);
     }
+  }
+  function light(tile,slot,...pose){
+    if(legacy){
+      const {group,count,index}=legacyMap[slot];
+      instance(group,tile*count+index,...pose);
+    }else instance(lights,tile*20+slot,...pose);
   }
   let cityBase;
   function city(distance) {
     const base=Math.floor(distance/tileLength);
-    cityGroup.position.z=distance-base*tileLength;
-    if(base===cityBase)return;
+    cityGroup.position.z=legacy?0:distance-base*tileLength;
+    if(!legacy&&base===cityBase)return;
     cityBase=base;
     for(let i=0;i<tileCount;i++){
       const tile=base+i-1;
-      const z=(1-i)*tileLength;
-      const lightIndex=i*20;
+      const z=legacy?distance-tile*tileLength:(1-i)*tileLength;
       for(let s=0;s<2;s++){
         const side=s===0?-1:1;
         const h=4+((tile*17+s*7)%11+11)%11*.66;
         const index=i*4+s*2;
         instance(buildings,index,side*6.7,h/2,z,3.1,h,5.15);
         instance(buildings,index+1,side*10.2,h*.61,z-5,3.6,h*1.22,5.6);
-        for(let j=0;j<4;j++)instance(lights,lightIndex+s*4+j,side*5.13,1.7+j*(h-2)/4,z,.04,.09,3.8);
-        instance(lights,lightIndex+8+s,side*4.16,.02,z,.09,.035,11.8);
-        instance(lights,lightIndex+10+s,side*5.1,h*.91,z,.06,.20,1.8);
-        instance(lights,lightIndex+13+s,side*4.47,.03,z-2,.17,.05,3.7);
-        instance(lights,lightIndex+15+s,side*9,h*1.18,z-4,.16,.16,2.6);
+        for(let j=0;j<4;j++)light(i,s*4+j,side*5.13,1.7+j*(h-2)/4,z,.04,.09,3.8);
+        light(i,8+s,side*4.16,.02,z,.09,.035,11.8);
+        light(i,10+s,side*5.1,h*.91,z,.06,.20,1.8);
+        light(i,13+s,side*4.47,.03,z-2,.17,.05,3.7);
+        light(i,15+s,side*9,h*1.18,z-4,.16,.16,2.6);
       }
-      instance(lights,lightIndex+12,0,.009,z,.08,.025,2.8);
-      for(let j=0;j<3;j++)instance(lights,lightIndex+17+j,0,.005,z-j*3.4,7.8,.021,.045);
+      light(i,12,0,.009,z,.08,.025,2.8);
+      for(let j=0;j<3;j++)light(i,17+j,0,.005,z-j*3.4,7.8,.021,.045);
     }
     buildings.instanceMatrix.needsUpdate=true;
-    lights.instanceMatrix.needsUpdate=true;
+    for(const group of lightBatches)group.instanceMatrix.needsUpdate=true;
   }
 
   const starShape = new T.Shape();
@@ -166,6 +177,32 @@ export function createScene(canvas) {
     });
   }
 
+  const gl=diagnostics?renderer.getContext():null;
+  const timer=gl?.getExtension('EXT_disjoint_timer_query_webgl2');
+  let gpuQuery=null, gpuFrame=0;
+  function draw() {
+    if(!diagnostics?.active){
+      renderer.render(scene,camera);
+      return;
+    }
+    if(timer&&gpuQuery&&gl.getQueryParameter(gpuQuery,gl.QUERY_RESULT_AVAILABLE)){
+      if(!gl.getParameter(timer.GPU_DISJOINT_EXT))
+        diagnostics.gpu(gl.getQueryParameter(gpuQuery,gl.QUERY_RESULT)/1000000);
+      gl.deleteQuery(gpuQuery);
+      gpuQuery=null;
+    }
+    const sample=timer&&!gpuQuery&&++gpuFrame%10===0;
+    if(sample){
+      gpuQuery=gl.createQuery();
+      if(gpuQuery)gl.beginQuery(timer.TIME_ELAPSED_EXT,gpuQuery);
+    }
+    const started=performance.now();
+    renderer.render(scene,camera);
+    const elapsed=performance.now()-started;
+    if(sample&&gpuQuery)gl.endQuery(timer.TIME_ELAPSED_EXT);
+    diagnostics.render(renderer.info.render,elapsed);
+  }
+
   function resize(width,height) {
     renderer.setPixelRatio(Math.min(1.5,window.devicePixelRatio||1));
     renderer.setSize(width,height,false);
@@ -205,7 +242,7 @@ export function createScene(canvas) {
       }
     }
     animalFactory.flush();
-    renderer.render(scene,camera);
+    draw();
     if (!projectNames||preview||!run.id) return [];
     return [{runner:run,z:0,self:true},...visible].flatMap(({runner,z,self,distant})=>{
       if(distant)return [];
@@ -214,12 +251,18 @@ export function createScene(canvas) {
       return [{id:runner.id,name:runner.name,z,x:(point.x+1)/2,y:(1-point.y)/2,self}];
     });
   }
+  function resetDiagnostics() {
+    if(gpuQuery)gl.deleteQuery(gpuQuery);
+    gpuQuery=null;
+    gpuFrame=0;
+  }
   function dispose() {
+    resetDiagnostics();
     const geometries=new Set(), materials=new Set();
     scene.traverse(item=>{if(item.isMesh){geometries.add(item.geometry);materials.add(item.material);if(item.isInstancedMesh)item.dispose();}});
     geometries.forEach(item=>item.dispose());
     materials.forEach(item=>item.dispose());
     renderer.dispose();
   }
-  return {resize, render, dispose};
+  return {resize, render, dispose, resetDiagnostics};
 }

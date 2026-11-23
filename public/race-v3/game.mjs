@@ -5,7 +5,21 @@ import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput,
 const get = id => document.getElementById(id);
 const canvas = get('scene');
 const settings = get('sensitivity');
-const multiplayer = new URLSearchParams(location.search).get('mode') === 'room' && window.parent !== window;
+const query=new URLSearchParams(location.search);
+const multiplayer=query.get('mode')==='room'&&window.parent!==window;
+const diagnosticMode=query.get('diagnostics')==='1';
+const cityMode=diagnosticMode&&query.get('city')==='legacy'?'legacy':'optimized';
+let diagnostics, createDiagnostics;
+if(diagnosticMode){
+  const module=await import('./diagnostics.mjs');
+  createDiagnostics=module.createDiagnostics;
+  diagnostics=createDiagnostics({city:cityMode,multiplayer});
+  module.diagnosticsPanel(()=>diagnostics.export(),{city:cityMode});
+  if(multiplayer)window.partyRaceDiagnostics=()=>{
+    diagnostics.finish(Boolean(roomState&&roomState.clock>=roomState.endsAt-120));
+    return diagnostics.export();
+  };
+}
 let network, roomState, roomHealth, roomStars;
 const roomNotice = get('room-status');
 const nameplates=new Map();
@@ -158,7 +172,14 @@ function resetInput() {
   swipe=null;
 }
 function play() {
-  if (!multiplayer) run = createRun();
+  if (!multiplayer) {
+    run=createRun();
+    if(createDiagnostics){
+      diagnostics.dispose();
+      diagnostics=createDiagnostics({city:cityMode,multiplayer});
+      view.resetDiagnostics();
+    }
+  }
   lastFrame = null;
   timeDebt = 0;
   resetInput();
@@ -213,6 +234,19 @@ function finish() {
   get('again').focus();
 }
 function frame(now) {
+  if(!diagnostics||mode!=='running'){
+    updateFrame(now);
+    return;
+  }
+  const started=performance.now();
+  if(!multiplayer)diagnostics.begin(now);
+  diagnostics.beginFrame();
+  updateFrame(now);
+  diagnostics.frame(now,performance.now()-started);
+  if(multiplayer&&roomState?.clock>=roomState?.endsAt)diagnostics.finish(true);
+  if(!multiplayer&&run.done)diagnostics.finish(run.time>=DURATION);
+}
+function updateFrame(now) {
   frameId=0;
   const delta=lastFrame===null ? 0 : Math.min(.10,(now-lastFrame)/1000);
   lastFrame=now;
@@ -259,6 +293,7 @@ function frame(now) {
 function renderRoom(now, delta, direction) {
   roomState = network?.sample(now, delta, direction);
   const state = roomState;
+  diagnostics?.begin(now,state);
   const upcoming = state && state.clock < state.startsAt;
   const label = !state?.connected ? '正在连接比赛…' :
     upcoming ? '准备 '+Math.ceil((state.startsAt-state.clock)/1000)+' 秒' :
@@ -337,7 +372,11 @@ function performAction(action) {
 }
 if (multiplayer) {
   const {connectRaceView} = await import('./room-client.mjs');
-  network=connectRaceView();
+  network=connectRaceView(diagnostics);
+  if(diagnostics)window.addEventListener('message',event=>{
+    if(event.origin===location.origin&&event.source===window.parent&&event.data?.type==='party-race-rtt'&&
+      Number.isFinite(event.data.ms))diagnostics.rtt(event.data.ms);
+  });
   get('start').textContent='进入比赛';
   get('mode').textContent='进入时请自然握住手机，当前角度会自动设为中位。无感应器时使用左右键。比赛按房间时间开始。';
   get('rank').hidden=false;
@@ -430,7 +469,11 @@ canvas.addEventListener('webglcontextrestored',resize);
 
 try {
   const {createScene}=await import('./scene.mjs');
-  view=createScene(canvas);
+  view=createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
+    get active(){return diagnostics.active},
+    gpu:ms=>diagnostics.gpu(ms),
+    render:(stats,ms)=>diagnostics.render(stats,ms)
+  }:null});
   resize();
   get('start').disabled=false;
   schedule();

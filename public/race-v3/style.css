@@ -63,3 +63,8 @@ a{display:inline-block;padding:8px;color:#ece0ff}
 }
 
 #orientation-calibration{position:absolute;z-index:2;inset:20% 12px auto;margin:0 auto;width:max-content;max-width:calc(100% - 24px);padding:8px 10px;background:#170d30ed;border-radius:10px;text-align:center;pointer-events:none}
+
+.race-diagnostics{position:fixed;z-index:6;left:max(8px,env(safe-area-inset-left));bottom:max(78px,calc(env(safe-area-inset-bottom) + 72px));max-width:calc(100% - 16px);padding:7px 10px;border:1px solid #896bb4;border-radius:9px;background:#211337f5;color:#fff;font-size:.75rem}
+.race-diagnostics summary{cursor:pointer}
+.race-diagnostics p{margin:5px 0}
+.race-diagnostics button{margin:2px 4px 2px 0;padding:4px 8px}

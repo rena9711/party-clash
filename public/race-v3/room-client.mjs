@@ -10,13 +10,14 @@ const KEEPALIVE = 200;
 const interpolate = (a,b,t) => a+(b-a)*t;
 const poseRate={x:10,y:10,distance:27,vx:Infinity};
 
-export function connectRaceView() {
+export function connectRaceView(diagnostics) {
   let packet, seed, track, mine, display, receivedAt, clockOffset;
   let displayedObjects, lastSent=-Infinity, sentAxis;
   let interpolationDelay=INTERPOLATION_MS, playback=-Infinity;
   const history=[];
   const remote=new Map();
   const origin = location.origin;
+  const encoder=diagnostics?new TextEncoder():null;
 
   window.addEventListener('message', event => {
     if (event.origin !== origin || event.source !== window.parent ||
@@ -28,8 +29,8 @@ export function connectRaceView() {
       if(!connected) sentAxis=undefined;
       return;
     }
-    const state=unpackRace(raw);
     const now=performance.now();
+    const state=unpackRace(raw);
     if (state.seed!==seed) {
       seed=state.seed;
       track=createTrack(seed);
@@ -68,6 +69,11 @@ export function connectRaceView() {
     }
     history.push({now:state.now, runners:new Map(state.runners.map(runner=>[runner.slot,runner]))});
     if(history.length>12)history.shift();
+    if(diagnostics?.active){
+      const decode=performance.now()-now;
+      const size=encoder.encode('42'+JSON.stringify(['race-state',raw])).byteLength;
+      diagnostics.snapshot(now,state.now,size,decode);
+    }
   });
 
   function send(input) {
