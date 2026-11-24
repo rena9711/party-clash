@@ -1,7 +1,7 @@
 window.MineBoard = (() => {
   const escape = value => String(value).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   function face(){
-    return '<img class="mine-cat" src="/assets/angry-cat.webp" alt="" draggable="false">';
+    return '<img class="mine-cat" src="/assets/golden-cat.webp" alt="" draggable="false">';
   }
   function grid(used,enabled){
     return '<div class="foremen-grid">'+Array.from({length:20},(_,i)=>used.has(i+1)
