@@ -203,14 +203,34 @@ export function createScene(canvas,{cityMode="optimized",diagnostics=null}={}) {
     diagnostics.render(renderer.info.render,elapsed);
   }
 
-  function resize(width,height) {
-    renderer.setPixelRatio(Math.min(1.5,window.devicePixelRatio||1));
-    renderer.setSize(width,height,false);
+  let width=1, height=1, pixelRatio=1, frameInterval=16.7;
+  let priorFrame, slowFrames=0;
+  function resize(w,h) {
+    width=w;
+    height=h;
+    // Bound shading cost on high-density phone displays.
+    pixelRatio=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(640000/(w*h)));
+    renderer.setDrawingBufferSize(w,h,pixelRatio);
     camera.aspect=width/height;
     camera.fov=camera.aspect>1.45 ? 47 : 53;
     camera.updateProjectionMatrix();
   }
   function render(run,time,preview,others=[],rosterSize=1,projectNames=true) {
+    if (!preview) {
+      const now=performance.now();
+      const interval=now-(priorFrame??now);
+      priorFrame=now;
+      if(interval>0&&interval<120) frameInterval+=(interval-frameInterval)*.08;
+      const minimum=Math.min(.68,pixelRatio);
+      if(frameInterval>27 && pixelRatio>minimum && ++slowFrames>=18){
+        pixelRatio=Math.max(minimum,pixelRatio*.83);
+        renderer.setDrawingBufferSize(width,height,pixelRatio);
+        slowFrames=0;
+      }
+      if(frameInterval<=27) slowFrames=0;
+    } else {
+      priorFrame=undefined;
+    }
     const scale=preview?1:raceModelScale(rosterSize);
     city(run.distance);
     objects(run,time);

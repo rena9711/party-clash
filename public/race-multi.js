@@ -53,7 +53,7 @@ window.RaceMulti = (() => {
         loading.querySelector('p').textContent = '赛道加载较慢，可以重试轻量赛道。';
         retry.hidden = false;
       }, 6000);
-      const options = new URLSearchParams({mode:'room', v:'race-watch-1'});
+      const options = new URLSearchParams({mode:'room', v:'race-smooth-1'});
       if (light) options.set('view', 'light');
       frame.src = route('/race-v3/?'+options);
       stage.append(frame);

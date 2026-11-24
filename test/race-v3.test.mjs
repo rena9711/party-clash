@@ -282,6 +282,10 @@ test('room input predicts local motion, coalesces steady input and retains autho
     for(let step=1;step<=7;step++)view.sample(now+step*16,.016,1);
     const predicted=view.sample(now+128,.016,1).run;
     assert.ok(predicted.x>initial+.1);
+    // A turn begins locally while the only server snapshot still has x=0.
+    assert.ok(predicted.x-initial>.50);
+    assert.ok(predicted.distance>1.3);
+
     assert.equal(predicted.stars,0);
     assert.equal(messages.filter(p=>p.input?.axis===1).length,1);
     view.sample(now+150,.016,0);

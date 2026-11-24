@@ -1,7 +1,7 @@
 import {createLightScene} from './light-scene.mjs?v=race-chase-1';
 import '../player-identity.js';
 import {layoutNameplates} from './presentation.mjs';
-import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs?v=race-watch-1';
+import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs?v=race-smooth-1';
 
 const get = id => document.getElementById(id);
 const canvas = get('scene');
@@ -63,7 +63,7 @@ function angle() {
 }
 function updateControls() {
   const controls=get('controls');
-  const hide=mode !== 'running' || baseline !== null || rotationPending || (multiplayer && Boolean(roomState?.run?.done));
+  const hide=mode !== 'running' || (baseline !== null && !matchMedia('(pointer: coarse)').matches) || rotationPending || (multiplayer && Boolean(roomState?.run?.done));
   if(controls.hidden!==hide)controls.hidden=hide;
 }
 function show(next) {
@@ -267,10 +267,10 @@ function updateFrame(now) {
     if(orientationNotice.hidden===rotationPending)orientationNotice.hidden=!rotationPending;
     if (baseline !== null && rawAngle !== null) {
       const sample=clamp(rawAngle-baseline,-70,70);
-      filtered+=(sample-filtered)*(1-Math.exp(-delta*17));
+      filtered+=(sample-filtered)*(1-Math.exp(-delta*26));
     }
     const keyboard=Number(keys.has('ArrowRight'))-Number(keys.has('ArrowLeft'));
-    const direction=keyboard || (rotationPending ? 0 : baseline===null ? touchAxis : tiltInput(filtered,settings.value));
+    const direction=keyboard || (rotationPending ? 0 : touchAxis || (baseline===null ? 0 : tiltInput(filtered,settings.value)));
     if (multiplayer) {
       renderRoom(now,delta,direction);
       schedule();
@@ -384,7 +384,7 @@ function performAction(action) {
   }
 }
 if (multiplayer) {
-  const {connectRaceView} = await import('./room-client.mjs?v=race-watch-1');
+  const {connectRaceView} = await import('./room-client.mjs?v=race-smooth-1');
   network=connectRaceView(diagnostics);
   if(diagnostics)window.addEventListener('message',event=>{
     if(event.origin===location.origin&&event.source===window.parent&&event.data?.type==='party-race-rtt'&&
@@ -422,7 +422,8 @@ get('pause').onclick=pause;
 get('reset').onclick=intro;
 get('resume').onclick=()=>{show('running');schedule();};
 get('recalibrate').onclick=recalibrateManually;
-get('jump').onclick=()=>performAction('jump');
+get('jump').onpointerdown=event=>{if(event.button===0)performAction('jump');};
+get('jump').onclick=event=>{if(event.detail===0)performAction('jump');};
 get('boost').onclick=()=>performAction('boost');
 for(const [id,direction] of [['left',-1],['right',1]]) {
   const control=get(id);
@@ -499,7 +500,7 @@ useView(lightView);
 get('start').disabled = false;
 if (multiplayer) window.parent.postMessage({type:'party-race-ready'}, location.origin);
 async function loadRichScene() {
-  const {createScene} = await import('./scene.mjs');
+  const {createScene} = await import('./scene.mjs?v=race-smooth-1');
   richView = createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
     get active(){return diagnostics.active},
     gpu:ms=>diagnostics.gpu(ms),

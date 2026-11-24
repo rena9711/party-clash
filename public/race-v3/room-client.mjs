@@ -1,4 +1,4 @@
-import {advanceMotion, BOUNDARY, clamp, createTrack, DURATION, jump, raceSpeed} from './simulation.mjs?v=race-watch-1';
+import {advanceMotion, BOUNDARY, clamp, createTrack, DURATION, jump, raceSpeed} from './simulation.mjs?v=race-smooth-1';
 import {unpackRace} from './wire.mjs';
 
 const MAX_AGE = 600;
@@ -14,6 +14,7 @@ const poseRate={x:10,y:10,distance:27,vx:Infinity};
 export function connectRaceView(diagnostics) {
   let packet, seed, track, mine, display, receivedAt, clockOffset;
   let watchedSlot, watchedObjects, displayedObjects, lastSent=-Infinity, sentAxis;
+  let localAxis=0, axisChangedAt=-Infinity;
   let interpolationDelay=INTERPOLATION_MS, playback=-Infinity;
   const history=[];
   const remote=new Map();
@@ -38,6 +39,8 @@ export function connectRaceView(diagnostics) {
       history.length=0;
       remote.clear();
       display=null;
+      localAxis=0;
+      axisChangedAt=-Infinity;
       watchedSlot=undefined;
       clockOffset=undefined;
       interpolationDelay=INTERPOLATION_MS;
@@ -110,6 +113,10 @@ export function connectRaceView(diagnostics) {
       if(!mine)return result;
       if(result.connected&&result.moving){
         const axis=Math.round(direction*20)/20;
+        if (Math.abs(direction-localAxis)>=.12 || (direction===0 && localAxis!==0)) {
+          localAxis=direction;
+          axisChangedAt=now;
+        }
         const changed=sentAxis!==axis;
         if((changed && (axis===0 || now-lastSent>=SEND_INTERVAL)) ||
            (axis!==0 && now-lastSent>=KEEPALIVE)){
@@ -121,13 +128,18 @@ export function connectRaceView(diagnostics) {
         const correction=1-Math.exp(-delta*9);
         const overhang=clamp(clock-state.now,0,160)/1000;
         const targetX=clamp(mine.x+mine.vx*overhang,-BOUNDARY,BOUNDARY);
-        display.x+=(targetX-display.x)*correction;
+        const drift=targetX-display.x;
+        // Let a new local turn lead briefly while the server receives the input.
+        if(now-axisChangedAt>200 || Math.abs(drift)>1.45)
+          display.x+=Math.sign(drift)*Math.max(0,Math.abs(drift)-.06)*(1-Math.exp(-delta*4));
         // A predicted jump may be briefly ahead of the server; reconcile against
         // airborne samples without continually restarting a jump on the ground.
         if(mine.y>.02 && Math.abs(display.y-mine.y)>.24)
           display.y+=(mine.y-display.y)*correction;
         const speed=raceSpeed(mine.time,mine.boostUntil);
-        display.distance=interpolate(display.distance,mine.distance+speed*overhang,1-Math.exp(-delta*20));
+        const distance=mine.distance+speed*overhang;
+        const predicted=display.distance+speed*delta;
+        display.distance=clamp(interpolate(predicted,distance,1-Math.exp(-delta*7)),mine.distance-.75,distance+1.25);
       } else {
         sentAxis=undefined;
       }
