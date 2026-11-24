@@ -78,7 +78,7 @@ const rules={
  reaction:'等红灯变绿后立即点击。抢跑得零分。',
  memory:'记住格子闪亮的顺序。看到“开始作答”后，按相同顺序点击。',
  bomb:'随机选一人先猜，之后轮流猜。只能选两个边界之间的整数，猜中炸弹就输。',
- mine:'20 位大叔里有一位会发火。每按一位得 10 分，至少按一次才能传给下一位。引爆的人接受惩罚，积分保留。',
+ mine:'20 只小猫里有一只会炸毛。每按一只得 10 分，至少按一次才能传给下一位。引爆的人接受惩罚，积分保留。',
  race:'左右移动躲避障碍，跳过跨栏并收集星星。进入赛道后可开启体感。',
  snake:'拖动摇杆转向，吃光点得分。避开边界和其他蛇身。'
 };
@@ -95,7 +95,7 @@ function playMine(){
  const name=room.players.find(p=>p.id===b.turnId)?.name;
  const used=new Set(b.history.map(h=>h.number));
  const players=room.players.map(p=>({name:p.name,points:p.minePoints||0}));
- wrap(`<h2>踩雷大师</h2><p>${wait>0?'即将开始':own?'轮到你了':'轮到 '+safe(name)} · 剩余 ${20-used.size} 位</p>${MineBoard.grid(used,own)}<button class="btn" id="pass" ${own&&b.picks?'':'disabled'}>传给下一位</button>${MineBoard.ranking(players)}`);
+ wrap(`<h2>踩雷大师</h2><p>${wait>0?'即将开始':own?'轮到你了':'轮到 '+safe(name)} · 剩余 ${20-used.size} 只</p>${MineBoard.grid(used,own)}<button class="btn" id="pass" ${own&&b.picks?'':'disabled'}>传给下一位</button>${MineBoard.ranking(players)}`);
  root.querySelectorAll('[data-cell]').forEach(el=>el.onclick=()=>socket.emit('mine-action',{cell:Number(el.dataset.cell),round:room.round}));
  $('pass').onclick=()=>socket.emit('mine-action',{pass:true,round:room.round});
  if(wait>0)timer=setTimeout(playMine,wait+5);
