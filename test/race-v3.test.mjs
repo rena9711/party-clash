@@ -306,6 +306,26 @@ test('room input predicts local motion, coalesces steady input and retains autho
     assert.equal(view.sample(receipt+395,.045).others[0].distance,capped);
     deliver(1650,false);
     assert.equal(view.sample(performance.now(),0).connected,false);
+    race.runners[0].run.done=true;
+    race.runners[0].run.health=0;
+    race.runners[1].run.distance=120;
+    time=1750;
+    deliver(1850);
+    const spectating=view.sample(time+180,.10,1);
+    assert.equal(spectating.run.id,'local');
+    assert.equal(spectating.moving,false);
+    assert.equal(spectating.watched.id,'other');
+    assert.ok(spectating.watched.objects.some(object=>object.at>120));
+    const previousDistance=spectating.watched.distance;
+    race.runners[1].run.distance=126;
+    time=1950;
+    deliver(2050);
+    assert.ok(view.sample(time+180,.10,1).watched.distance>previousDistance);
+    race.runners[1].run.done=true;
+    time=2150;
+    deliver(2250);
+    assert.equal(view.sample(time+180,.10).watched,null);
+
   } finally {
     globalThis.performance=originalPerformance;
     if(originalWindow===undefined)delete globalThis.window;

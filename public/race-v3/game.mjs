@@ -1,7 +1,7 @@
 import {createLightScene} from './light-scene.mjs?v=race-chase-1';
 import '../player-identity.js';
 import {layoutNameplates} from './presentation.mjs';
-import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs';
+import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs?v=race-watch-1';
 
 const get = id => document.getElementById(id);
 const canvas = get('scene');
@@ -307,7 +307,8 @@ function renderRoom(now, delta, direction) {
   const upcoming = state && state.clock < state.startsAt;
   const label = !state?.connected ? '正在连接比赛…' :
     upcoming ? '准备 '+Math.ceil((state.startsAt-state.clock)/1000)+' 秒' :
-    state.run?.done ? '本场已结束，等待其他玩家结算' : '';
+    state.watched ? '观战中 · '+state.watched.name :
+    state.run?.done ? '等待结算…' : '';
   if(roomNotice.hidden===Boolean(label))roomNotice.hidden=!label;
   if (roomNotice.textContent!==label) roomNotice.textContent=label;
   if (!state?.run) return;
@@ -326,7 +327,9 @@ function renderRoom(now, delta, direction) {
   updateHud(Math.max(0,(state.endsAt-Math.max(state.clock,state.startsAt))/1000));
   updateControls();
   const updateLabels=now-labelsAt>=50;
-  const labels=view.render(run,run.time,false,state.others,state.runners.length,updateLabels);
+  const focus=state.watched || run;
+  const labels=view.render(focus,focus.time,false,state.others,state.runners.length,updateLabels);
+  if(state.watched) for(const label of labels) label.self=false;
   if(updateLabels){
     renderNameplates(labels);
     labelsAt=now;
@@ -381,7 +384,7 @@ function performAction(action) {
   }
 }
 if (multiplayer) {
-  const {connectRaceView} = await import('./room-client.mjs?v=room-loading-2');
+  const {connectRaceView} = await import('./room-client.mjs?v=race-watch-1');
   network=connectRaceView(diagnostics);
   if(diagnostics)window.addEventListener('message',event=>{
     if(event.origin===location.origin&&event.source===window.parent&&event.data?.type==='party-race-rtt'&&
@@ -405,7 +408,8 @@ function intro() {
 function resize() {
   if (!view) return;
   view.resize(Math.max(1,canvas.clientWidth),Math.max(1,canvas.clientHeight));
-  view.render(run,mode==='intro'?previewTime:run.time,mode==='intro',roomState?.others,roomState?.runners?.length);
+  const focus=roomState?.watched || run;
+  view.render(focus,mode==='intro'?previewTime:focus.time,mode==='intro',roomState?.others,roomState?.runners?.length);
 }
 function refreshTouch() {
   touchAxis=clamp([...touches.values()].reduce((sum,value)=>sum+value,0),-1,1);

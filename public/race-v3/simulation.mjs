@@ -8,6 +8,10 @@ const FOX_RADIUS = .34;
 export const BOOST_DURATION = 2.5;
 export const BOOST_COOLDOWN = 8;
 
+export function raceSpeed(time, boostUntil) {
+  return 14 + Math.min(time * .12, 5.4) + (time < boostUntil ? 5 : 0);
+}
+
 export const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
 export function screenTilt(beta, gamma, angle) {
@@ -24,7 +28,7 @@ export function tiltInput(delta, sensitivity) {
 
 export function createRun(random = Math.random, track = null) {
   return {
-    random, time: 0, distance: 0, speed: 12, x: 0, y: 0, vy: 0, vx: 0,
+    random, time: 0, distance: 0, speed: raceSpeed(0, 0), x: 0, y: 0, vy: 0, vx: 0,
     health: 3, stars: 0, protectedUntil: 0, hit: null, lastPickup: -1,
     track, trackIndex: 0, boostUntil: 0, boostReadyAt: 0,
     objects: [], nextDistance: 27, wave: 0, landedAt: -1, done: false
@@ -102,7 +106,7 @@ export function advance(run, dt, direction) {
   if (run.done || dt <= 0) return;
   const before = run.distance;
   run.time = Math.min(DURATION, run.time + dt);
-  run.speed = 12 + Math.min(run.time * .12, 5.4) + (run.time < run.boostUntil ? 5 : 0);
+  run.speed = raceSpeed(run.time, run.boostUntil);
   run.distance += run.speed * dt;
   advanceMotion(run, dt, direction);
   if (run.track) {
