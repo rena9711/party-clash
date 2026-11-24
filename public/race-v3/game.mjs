@@ -492,7 +492,7 @@ canvas.addEventListener('webglcontextrestored', () => {
 });
 useView(lightView);
 get('start').disabled = false;
-try {
+async function loadRichScene() {
   const {createScene} = await import('./scene.mjs');
   richView = createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
     get active(){return diagnostics.active},
@@ -500,7 +500,8 @@ try {
     render:(stats,ms)=>diagnostics.render(stats,ms)
   }:null});
   useView(richView);
-} catch (error) {
+}
+if (query.get('view') !== 'light') loadRichScene().catch(error => {
   console.warn('3D race rendering unavailable', error);
   useView(lightView);
-}
+});
