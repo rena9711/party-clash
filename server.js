@@ -88,7 +88,9 @@ const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
 function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,minePoints:r.game==='mine'?p.value:undefined,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
-function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(onlineCount(r)===0){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);clearInterval(r.memoryInterval);rooms.delete(r.code);removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))}},24*60*60*1000)}
+const ROOM_LIFETIME=24*60*60*1000;
+function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(rooms.get(r.code)!==r)return;clearTimeout(r.timer);for(const interval of [r.raceInterval,r.snakeInterval,r.memoryInterval])clearInterval(interval);rooms.delete(r.code);io.to(r.code).emit('room-closed');for(const id of io.sockets.adapter.rooms.get(r.code)||[]){const peer=io.sockets.sockets.get(id);if(peer){peer.data.room=null;peer.leave(r.code)}}removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))},Math.max(0,r.createdAt+ROOM_LIFETIME-Date.now()));r.expireTimer.unref?.()}
+app.post('/api/my-rooms',(req,res)=>{res.set('Cache-Control','no-store');const token=validSession(req.body?.session),now=Date.now();if(!token)return res.json({now,rooms:[]});const list=[];for(const r of rooms.values()){const p=[...r.players.values()].find(p=>p.session===token);const expiresAt=r.createdAt+ROOM_LIFETIME;if(p&&expiresAt>now)list.push({code:r.code,hostName:r.players.get(r.host)?.name||'玩家',owner:p.id===r.host,online:onlineCount(r),expiresAt});}res.json({now,rooms:list.sort((a,b)=>a.expiresAt-b.expiresAt)})});
 function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
 function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(r.game==='tap'?Number.MAX_SAFE_INTEGER:100,Math.floor(Number(value)||0)));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
 function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=r.game==='race'
@@ -154,8 +156,9 @@ s.on('create',async(input,ack)=>{
   if(get(s))return ack?.({error:'请先离开当前房间'});
   let c=code();
   while(rooms.has(c))c=code();
-  const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null};
+  const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null,createdAt:Date.now()};
   rooms.set(c,r);
+  roomExpiry(r);
   r.players.set(s.id,{id:s.id,name:identity.name,session:validSession(session),score:0,ready:false,online:true});
   s.join(c);
   s.data.room=c;
@@ -174,7 +177,7 @@ s.on('create',async(input,ack)=>{
 s.on('join',(input,ack)=>{
   const {code:raw,name,session,resume}=input||{};
   const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);
-  if(!r)return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});
+  if(!r||r.createdAt+ROOM_LIFETIME<=Date.now())return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});
   if(get(s)&&get(s)!==r)return ack?.({error:'请先离开当前房间'});
   const token=validSession(session);
   const old=token&&[...r.players.values()].find(player=>player.session===token);
@@ -187,8 +190,7 @@ s.on('join',(input,ack)=>{
   }
   if(!old&&r.phase!=='lobby'&&r.phase!=='results')return ack?.({error:'游戏进行中，请稍后加入'});
   if(!old&&r.players.size>=10)return ack?.({error:'房间已满'});
-  clearTimeout(r.expireTimer);
-  r.expireTimer=null;
+  roomExpiry(r);
   if(old) {
     if(old.id!==s.id){
       const oldSocket=io.sockets.sockets.get(old.id);
@@ -340,4 +342,4 @@ app.post('/api/challenge/:id/submit',(req,res)=>{const c=db.challenges.find(x=>x
 app.get('/api/rivals/:id',(req,res)=>{const id=req.params.id;if(!sid(id))return res.status(400).json({error:'无效玩家'});const rivals=new Map();for(const m of db.matches){if(m.a!==id&&m.b!==id)continue;const other=m.a===id?m.b:m.a;const x=rivals.get(other)||{id:other,wins:0,losses:0,draws:0,last:0};const a=m.a===id?m.aScore:m.bScore,b=m.a===id?m.bScore:m.aScore;if(a>b)x.wins++;else if(a<b)x.losses++;else x.draws++;x.last=m.at;rivals.set(other,x)}res.json([...rivals.values()].sort((a,b)=>b.last-a.last).map(x=>({...x,name:display(x.id)})))});
 app.get('/api/health',(req,res)=>res.json({ok:true,version:'0.9-room-storage',roomStorage:hasDatabase?'postgres':'memory',roomCount:rooms.size}));
 
-const PORT=process.env.PORT||3000;import('./race-v3-room.mjs').then(core=>{RaceV3=core;return loadSavedRooms(rooms)}).then(()=>server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});
+const PORT=process.env.PORT||3000;import('./race-v3-room.mjs').then(core=>{RaceV3=core;return loadSavedRooms(rooms)}).then(()=>{for(const r of rooms.values())roomExpiry(r);server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))}).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});
