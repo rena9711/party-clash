@@ -330,6 +330,25 @@ test('room input predicts local motion, coalesces steady input and retains autho
     deliver(2250);
     assert.equal(view.sample(time+180,.10).watched,null);
 
+    // Keep the server's lateral position behind the local player during a gentle turn.
+    for (const direction of [1,-1]) {
+      race.seed++;
+      const local=race.runners[0].run;
+      Object.assign(local,{done:false,health:3,x:-direction*.5,vx:0,distance:30});
+      let lastX=local.x, lastDistance=local.distance;
+      for (let frame=1;frame<=48;frame++) {
+        time+=16;
+        if(frame===1 || frame%6===0) deliver(time+500);
+        const pose=view.sample(time,.016,direction*.22).run;
+        assert.ok((pose.x-lastX)*direction>0, 'local turn should keep moving through center');
+        assert.ok(pose.distance>=lastDistance, 'the track should not move backward after a delayed packet');
+        lastX=pose.x;
+        lastDistance=pose.distance;
+      }
+      assert.ok(lastX*direction>.15, 'gentle turn should cross the center with delayed positions');
+    }
+
+
   } finally {
     globalThis.performance=originalPerformance;
     if(originalWindow===undefined)delete globalThis.window;

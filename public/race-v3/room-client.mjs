@@ -1,4 +1,4 @@
-import {advanceMotion, BOUNDARY, clamp, createTrack, DURATION, jump, raceSpeed} from './simulation.mjs?v=race-smooth-1';
+import {advanceMotion, BOUNDARY, clamp, createTrack, DURATION, jump, raceSpeed} from './simulation.mjs?v=race-center-1';
 import {unpackRace} from './wire.mjs';
 
 const MAX_AGE = 600;
@@ -124,22 +124,30 @@ export function connectRaceView(diagnostics) {
           lastSent=now;
           sentAxis=axis;
         }
+        const beforeTurn=display.x;
         advanceMotion(display,delta,direction);
         const correction=1-Math.exp(-delta*9);
         const overhang=clamp(clock-state.now,0,160)/1000;
         const targetX=clamp(mine.x+mine.vx*overhang,-BOUNDARY,BOUNDARY);
         const drift=targetX-display.x;
         // Let a new local turn lead briefly while the server receives the input.
-        if(now-axisChangedAt>200 || Math.abs(drift)>1.45)
-          display.x+=Math.sign(drift)*Math.max(0,Math.abs(drift)-.06)*(1-Math.exp(-delta*4));
+        if(now-axisChangedAt>200 || Math.abs(drift)>1.45){
+          const correctionX=Math.sign(drift)*Math.min(2*delta,Math.max(0,Math.abs(drift)-.06)*(1-Math.exp(-delta*4)));
+          const movement=display.x-beforeTurn;
+          // A late snapshot must not cancel the player's turn as they cross the track.
+          const limit=direction!==0 && correctionX*direction<0 ? Math.max(0,movement*direction)*.35 : Infinity;
+          display.x=clamp(display.x+Math.sign(correctionX)*Math.min(Math.abs(correctionX),limit),-BOUNDARY,BOUNDARY);
+        }
         // A predicted jump may be briefly ahead of the server; reconcile against
         // airborne samples without continually restarting a jump on the ground.
         if(mine.y>.02 && Math.abs(display.y-mine.y)>.24)
           display.y+=(mine.y-display.y)*correction;
         const speed=raceSpeed(mine.time,mine.boostUntil);
         const distance=mine.distance+speed*overhang;
-        const predicted=display.distance+speed*delta;
-        display.distance=clamp(interpolate(predicted,distance,1-Math.exp(-delta*7)),mine.distance-.75,distance+1.25);
+        const step=speed*delta;
+        const correctionZ=clamp((distance-display.distance-step)*(1-Math.exp(-delta*7)),-step*.4,step*.4);
+        const furthest=Math.max(display.distance,distance+3);
+        display.distance=Math.min(display.distance+step+correctionZ,furthest);
       } else {
         sentAxis=undefined;
       }

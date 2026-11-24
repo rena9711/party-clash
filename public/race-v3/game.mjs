@@ -1,7 +1,7 @@
 import {createLightScene} from './light-scene.mjs?v=race-chase-1';
 import '../player-identity.js';
 import {layoutNameplates} from './presentation.mjs';
-import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs?v=race-smooth-1';
+import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs?v=race-center-1';
 
 const get = id => document.getElementById(id);
 const canvas = get('scene');
@@ -384,7 +384,7 @@ function performAction(action) {
   }
 }
 if (multiplayer) {
-  const {connectRaceView} = await import('./room-client.mjs?v=race-smooth-1');
+  const {connectRaceView} = await import('./room-client.mjs?v=race-center-1');
   network=connectRaceView(diagnostics);
   if(diagnostics)window.addEventListener('message',event=>{
     if(event.origin===location.origin&&event.source===window.parent&&event.data?.type==='party-race-rtt'&&
@@ -500,7 +500,7 @@ useView(lightView);
 get('start').disabled = false;
 if (multiplayer) window.parent.postMessage({type:'party-race-ready'}, location.origin);
 async function loadRichScene() {
-  const {createScene} = await import('./scene.mjs?v=race-smooth-1');
+  const {createScene} = await import('./scene.mjs?v=race-center-1');
   richView = createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
     get active(){return diagnostics.active},
     gpu:ms=>diagnostics.gpu(ms),
