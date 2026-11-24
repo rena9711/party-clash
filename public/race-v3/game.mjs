@@ -1,4 +1,4 @@
-import {createLightScene} from './light-scene.mjs';
+import {createLightScene} from './light-scene.mjs?v=race-chase-1';
 import '../player-identity.js';
 import {layoutNameplates} from './presentation.mjs';
 import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs';

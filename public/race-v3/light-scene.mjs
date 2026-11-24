@@ -4,7 +4,9 @@ export function createLightScene(canvas, animals) {
   const portraits = new Map(animals.map(([id, emoji]) => {
     const image = new Image();
     image.src = './portraits/' + id + '.webp';
-    return [id, {image, emoji}];
+    const stride = new Image();
+    stride.src = './portraits/' + id + '-run.webp';
+    return [id, {image, stride, emoji}];
   }));
   let width, height;
 
@@ -64,10 +66,18 @@ export function createLightScene(canvas, animals) {
       const p=point(item.x,ahead,item.y || 0);
       const size=Math.min(width,height)*(runner ? .21 : .095)*p.scale;
       const portrait=runner && (portraits.get(runner.character)||portraits.get('fox'));
-      if(portrait?.image.naturalWidth) ctx.drawImage(portrait.image,p.x-size/2,p.y-size,size,size);
+      if (!preview && portrait?.stride.naturalWidth) {
+        const frameSize = portrait.stride.naturalHeight;
+        const count = portrait.stride.naturalWidth / frameSize;
+        const phase = (runner.distance * 1.18) % (2 * Math.PI);
+        const frame = runner.y > 0 ? 1 : Math.floor(phase * count / (2 * Math.PI));
+        ctx.drawImage(portrait.stride, frame * frameSize, 0, frameSize, frameSize, p.x-size/2, p.y-size, size, size);
+      } else if (preview && portrait?.image.naturalWidth) {
+        ctx.drawImage(portrait.image,p.x-size/2,p.y-size,size,size);
+      }
       else {
         ctx.font=size+'px system-ui';
-        ctx.fillText(portrait?.emoji || ({star:'⭐',bomb:'💣',hurdle:'🚧'}[object?.kind]),p.x,p.y);
+        ctx.fillText((portrait && (preview ? portrait.emoji : '💨')) || ({star:'⭐',bomb:'💣',hurdle:'🚧'}[object?.kind]),p.x,p.y);
       }
       if(runner?.id && !preview && projectNames) labels.push({id:runner.id,name:runner.name,self:runner===run,z:-ahead,x:p.x/width,y:(p.y-size)/height});
     }
