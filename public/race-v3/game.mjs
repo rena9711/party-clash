@@ -1,3 +1,4 @@
+import {createLightScene} from './light-scene.mjs';
 import '../player-identity.js';
 import {layoutNameplates} from './presentation.mjs';
 import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs';
@@ -470,23 +471,36 @@ window.addEventListener('pagehide',event=>{
   if (!event.persisted) view?.dispose();
 });
 window.addEventListener('pageshow',schedule);
-canvas.addEventListener('webglcontextlost',event=>{
+const lightCanvas = document.createElement('canvas');
+lightCanvas.className = 'light-scene';
+lightCanvas.setAttribute('aria-hidden', 'true');
+canvas.after(lightCanvas);
+const lightView = createLightScene(lightCanvas, PartyIdentity.animals);
+let richView;
+function useView(next) {
+  view = next;
+  lightCanvas.hidden = next !== lightView;
+  resize();
+  schedule();
+}
+canvas.addEventListener('webglcontextlost', event => {
   event.preventDefault();
-  pause();
+  useView(lightView);
 });
-canvas.addEventListener('webglcontextrestored',resize);
-
+canvas.addEventListener('webglcontextrestored', () => {
+  if (richView) useView(richView);
+});
+useView(lightView);
+get('start').disabled = false;
 try {
-  const {createScene}=await import('./scene.mjs');
-  view=createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
+  const {createScene} = await import('./scene.mjs');
+  richView = createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
     get active(){return diagnostics.active},
     gpu:ms=>diagnostics.gpu(ms),
     render:(stats,ms)=>diagnostics.render(stats,ms)
   }:null});
-  resize();
-  get('start').disabled=false;
-  schedule();
-} catch {
-  get('error-message').textContent=multiplayer?'此设备无法显示多人 3D。可等待比赛结算。':'请确认浏览器支持 WebGL 2，或使用原版继续游戏。';
-  show('error');
+  useView(richView);
+} catch (error) {
+  console.warn('3D race rendering unavailable', error);
+  useView(lightView);
 }

@@ -1,7 +1,6 @@
 window.RoomCharacters = (() => {
   const {animals} = PartyIdentity;
   let draft;
-  let previews;
 
   function icon(character) {
     return animals.find(([id])=>id===character)?.[1] ?? '';
@@ -12,7 +11,7 @@ window.RoomCharacters = (() => {
     return `<section class="panel character-picker" aria-labelledby="character-title">
       <h2 id="character-title">选择你的角色</h2>
       <div class="character-grid">${animals.map(([id,emoji,name])=>`<button type="button" class="character-card" data-character="${id}" aria-pressed="false">
-        <span class="character-preview" data-preview="${id}"></span>
+        <span class="character-preview" data-preview="${id}"><img src="/race-v3/portraits/${id}.webp" alt=""></span>
         <b>${emoji} ${name}</b><small></small>
       </button>`).join('')}</div>
       <p id="character-feedback" role="status">${own?'当前角色已确认':'每个角色只能由一位玩家选择'}</p>
@@ -53,20 +52,6 @@ window.RoomCharacters = (() => {
       });
     };
     draw();
-    previews ??= import('/race-v3/character-previews.mjs')
-      .then(module=>module.characterPreviews(animals.map(([id])=>id)))
-      .catch(()=>new Map());
-    previews.then(images=>{
-      if(!panel.isConnected)return;
-      for(const card of cards){
-        const url=images.get(card.dataset.character);
-        if(!url)continue;
-        const img=document.createElement('img');
-        img.src=url;
-        img.alt='';
-        card.querySelector('[data-preview]').append(img);
-      }
-    });
   }
   return {icon, markup, bind};
 })();
