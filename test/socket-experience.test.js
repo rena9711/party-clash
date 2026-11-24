@@ -303,7 +303,11 @@ for(const game of ['mine','bomb']){
         await passed;
       }
     }
-    assert.equal(room.results.at(-1).id,room.bomb.loser);
+    if(game==='mine'){
+      assert.equal(room.results.find(p=>p.exploded).id,room.bomb.loser);
+      assert.equal(room.results.reduce((sum,p)=>sum+p.earned,0),room.bomb.history.length*10);
+      assert.ok(room.players.every(p=>p.minePoints===p.score));
+    }else assert.equal(room.results.at(-1).id,room.bomb.loser);
     for(const p of players)p.socket.disconnect();
   });
 }

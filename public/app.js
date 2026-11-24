@@ -78,7 +78,7 @@ const rules={
  reaction:'等红灯变绿后立即点击。抢跑得零分。',
  memory:'记住格子闪亮的顺序。看到“开始作答”后，按相同顺序点击。',
  bomb:'随机选一人先猜，之后轮流猜。只能选两个边界之间的整数，猜中炸弹就输。',
- mine:'20格中藏着一颗雷。轮到你时至少翻一格，可以继续翻，也可以传给下一位。',
+ mine:'20 位大叔里有一位会发火。每按一位得 10 分，至少按一次才能传给下一位。引爆的人接受惩罚，积分保留。',
  race:'左右移动躲避障碍，跳过跨栏并收集星星。进入赛道后可开启体感。',
  snake:'拖动摇杆转向，吃光点得分。避开边界和其他蛇身。'
 };
@@ -94,7 +94,8 @@ function playMine(){
  const b=room.bomb,wait=room.startsAt-Date.now(), own=b.turnId===myId && wait<=0;
  const name=room.players.find(p=>p.id===b.turnId)?.name;
  const used=new Set(b.history.map(h=>h.number));
- wrap(`<h2>踩雷大师</h2><p>${wait>0?'即将开始':own?'轮到你了':'轮到 '+safe(name)} · 剩余 ${20-used.size} 格</p><div class="mine-board">${Array.from({length:20},(_,i)=>used.has(i+1)?'<span></span>':'<button class="tile" data-cell="'+(i+1)+'" '+(own?'':'disabled')+'>'+(i+1)+'</button>').join('')}</div><button class="btn" id="pass" ${own&&b.picks?'':'disabled'}>传给下一位</button><p>${b.history.map(h=>safe(h.name)+' 按了 '+h.number+' 号').join(' · ')}</p>`);
+ const players=room.players.map(p=>({name:p.name,points:p.minePoints||0}));
+ wrap(`<h2>踩雷大师</h2><p>${wait>0?'即将开始':own?'轮到你了':'轮到 '+safe(name)} · 剩余 ${20-used.size} 位</p>${MineBoard.grid(used,own)}<button class="btn" id="pass" ${own&&b.picks?'':'disabled'}>传给下一位</button>${MineBoard.ranking(players)}`);
  root.querySelectorAll('[data-cell]').forEach(el=>el.onclick=()=>socket.emit('mine-action',{cell:Number(el.dataset.cell),round:room.round}));
  $('pass').onclick=()=>socket.emit('mine-action',{pass:true,round:room.round});
  if(wait>0)timer=setTimeout(playMine,wait+5);
@@ -105,8 +106,10 @@ function revealLoser(ordered){
  if(revealed===key||!ordered.length)return;
  revealed=key;
  const overlay=document.createElement('div');
- overlay.className='punishment';
- overlay.innerHTML='<div><span>💣</span><strong>💥</strong><h2>恭喜'+safe(ordered.at(-1).name)+'，请接收惩罚</h2><button class="btn">查看排行榜</button></div>';
+ const mine=room.game==='mine';
+ const loser=mine?ordered.find(p=>p.exploded)||ordered.at(-1):ordered.at(-1);
+ overlay.className='punishment'+(mine?' mine-detonation':'');
+ overlay.innerHTML='<div>'+(mine?MineBoard.face():'<span>💣</span>')+'<strong>💥</strong><h2>恭喜'+safe(loser.name)+'，请接收惩罚</h2><button class="btn">查看排行榜</button></div>';
  document.body.append(overlay);
  overlay.querySelector('button').onclick=()=>overlay.remove();
 }
@@ -121,14 +124,14 @@ function personalResult(ordered){
   case 'tap':label='点击次数';value=p.value+' 次';break;
   case 'precision':label='最佳命中';value=p.value+' 分';break;
   case 'race':if(Number.isFinite(p.distance)){label='跑过距离';value=p.distance+' 米'}break;
-  case 'mine':case 'bomb':if(room.bomb?.finished){label=room.game==='mine'?'排雷结果':'猜数结果';value=p.id===room.bomb.loser?'引爆炸弹':'安全过关'}break;
+  case 'mine':case 'bomb':if(room.bomb?.finished){label=room.game==='mine'?'排雷结果':'猜数结果';value=p.exploded?'引爆炸弹':'安全过关'}break;
   case 'snake':if(Number.isFinite(p.foods)){label='吃豆数量';value=p.foods+' 颗'}break;
   case 'memory':if(Number.isFinite(p.correctCells)){label='累计答对';value=p.correctCells+' 格'}break;
   case 'reaction':if(Number.isFinite(local.elapsedMs)){label='反应时间';value=local.elapsedMs+' 毫秒'}break;
  }
  return `<div class="panel center"><div class="muted">${label}</div><strong class="round-primary">${value}</strong><div class="muted">本局得分 ${p.earned} 分</div></div>`;
 }
-function results(){let ordered=room.results||[];wrap(`<div class="center"><div class="hero">${room.game==='bomb'?'💥':'🏆'}</div><h2>第 ${room.round} 局结果</h2>${room.game==='bomb'?`<p class="muted">${room.bomb?.loser?'💥 爆炸数字：'+room.bomb.secret:'本轮无人猜中炸弹数字'}</p>`:''}</div>${personalResult(ordered)}<div class="panel">${ordered.map((p,i)=>`<div class="person"><span>${['🥇','🥈','🥉'][i]||i+1} ${safe(p.name)}${room.game==='race'?` · ${RoomCharacters.icon(p.character)} · ⭐${p.stars||0}颗 · ${p.value||0}分`:room.game==='bomb'?(p.exploded?' · 💥 猜中炸弹':' · ✅ 安全') :room.game==='tap'?' · '+p.value+' 次':p.champion?' · 冠军':room.game==='snake'?' · '+p.value+' 分':''}</span><b>+${p.earned}</b></div>`).join('')}</div><div class="status">最后一名可以自选趣味挑战、无酒精惩罚，或成年人自愿小酌；任何人都可以跳过。</div><div class="panel"><b>累计积分</b>${[...room.players].sort((a,b)=>b.score-a.score).map(p=>`<div class="person"><span>${safe(p.name)}</span><b>${p.score}</b></div>`).join('')}</div>${room.host===myId?`<div class="grid">${games.map(g=>`<button class="tile ${choice===g[0]?'selected':''}" data-game="${g[0]}"><span>${g[1]}</span>${g[2]}</button>`).join('')}</div><button class="btn" id="start" ${(choice==='race'&&!raceReady())?'disabled':''}>下一局 →</button>` :'<div class="status">等待房主开始下一局</div>'}${choice==='race'?RoomCharacters.markup(room,myId):''}<button class="btn secondary" id="leave-room">离开房间</button>`);document.querySelectorAll('[data-game]').forEach(b=>b.onclick=()=>{choice=b.dataset.game;socket.emit('select-game',{game:choice});results()});bindRoomControls(room.host===myId);revealLoser(ordered)}
+function results(){let ordered=room.results||[];wrap(`<div class="center"><div class="hero">${room.game==='bomb'?'💥':'🏆'}</div><h2>第 ${room.round} 局结果</h2>${room.game==='bomb'?`<p class="muted">${room.bomb?.loser?'💥 爆炸数字：'+room.bomb.secret:'本轮无人猜中炸弹数字'}</p>`:''}</div>${personalResult(ordered)}<div class="panel">${ordered.map((p,i)=>`<div class="person"><span>${['🥇','🥈','🥉'][i]||i+1} ${safe(p.name)}${room.game==='race'?` · ${RoomCharacters.icon(p.character)} · ⭐${p.stars||0}颗 · ${p.value||0}分`:room.game==='bomb'?(p.exploded?' · 💥 猜中炸弹':' · ✅ 安全') :room.game==='tap'?' · '+p.value+' 次':p.champion?' · 冠军':room.game==='snake'?' · '+p.value+' 分':''}</span><b>+${p.earned}</b></div>`).join('')}</div><div class="status">${room.game==='mine'?'引爆的玩家':'最后一名'}可以自选趣味挑战、无酒精惩罚，或成年人自愿小酌；任何人都可以跳过。</div><div class="panel"><b>累计积分</b>${[...room.players].sort((a,b)=>b.score-a.score).map(p=>`<div class="person"><span>${safe(p.name)}</span><b>${p.score}</b></div>`).join('')}</div>${room.host===myId?`<div class="grid">${games.map(g=>`<button class="tile ${choice===g[0]?'selected':''}" data-game="${g[0]}"><span>${g[1]}</span>${g[2]}</button>`).join('')}</div><button class="btn" id="start" ${(choice==='race'&&!raceReady())?'disabled':''}>下一局 →</button>` :'<div class="status">等待房主开始下一局</div>'}${choice==='race'?RoomCharacters.markup(room,myId):''}<button class="btn secondary" id="leave-room">离开房间</button>`);document.querySelectorAll('[data-game]').forEach(b=>b.onclick=()=>{choice=b.dataset.game;socket.emit('select-game',{game:choice});results()});bindRoomControls(room.host===myId);revealLoser(ordered)}
 function finish(v){if(local.submitted)return;local.submitted=true;stop();socket.emit('submit',{value:Math.max(0,Math.round(v))});renderArena()}function play(){if(config.game==='mine')return playMine();if(config.game==='race')return playRace();if(config.game==='memory'){stop();return MemoryMulti.enter({room,myId,socket,root})}if(config.game==='snake'){stop();return SnakeRoom.enter({room,myId,socket,root})}if(config.game==='bomb')return playBomb();let g=games.find(x=>x[0]===config.game),now=Date.now(),remain=Math.max(0,Math.ceil((config.endsAt-now)/1000)),wait=Math.max(0,Math.ceil((config.startsAt-now)/1000));wrap(`<div class="center"><span class="pill">第 ${room.round} 局 · ${room.players.length} 位玩家</span><h2>${g[1]} ${g[2]}</h2><div class="big" id="clock">${wait?'准备 '+wait:remain+'s'}</div></div><div class="panel"><div class="arena" id="arena"></div></div><div class="panel"><b>🎭 指定陷害对手</b><div class="row" style="margin:10px 0"><select id="target" style="width:100%;padding:10px;background:#292341;color:white;border-radius:9px">${room.players.filter(p=>p.id!==myId).map(p=>`<option value="${p.id}">${safe(p.name)}</option>`).join('')}</select></div><div class="grid">${[['freeze','🧊冰封'],['reverse','🔄反转'],['ghost','👻遮挡'],['steal','💰偷分'],['shield','🛡️护盾']].map(x=>`<button class="tile" style="min-height:49px" data-card="${x[0]}">${x[1]}</button>`).join('')}</div><p class="muted">每局只可发动一次；护盾可抵挡攻击。</p></div><div id="notice" class="status" style="display:none"></div><div class="muted">已完成：${room.players.filter(p=>p.submitted).length}/${room.players.length}</div>`);document.querySelectorAll('[data-card]').forEach(b=>b.onclick=()=>{if(Date.now()<config.startsAt)return;socket.emit('attack',{target:$('target').value,card:b.dataset.card});b.disabled=true;document.querySelectorAll('[data-card]').forEach(x=>x.disabled=true)});renderArena();stop();timer=setInterval(()=>{if(!room||room.phase!=='playing'){stop();return}const n=Date.now();if($('clock'))$('clock').textContent=n<config.startsAt?'准备 '+Math.ceil((config.startsAt-n)/1000):Math.max(0,Math.ceil((config.endsAt-n)/1000))+'s';if(n>=config.startsAt&&!local.started){local.started=true;renderArena()}if(n>=config.endsAt&&!local.submitted)finish(score());if(config.game==='reaction'&&local.started&&!local.greenShown&&n>=local.greenAt){local.greenShown=true;local.greenPerf=performance.now();renderArena()}if(config.game==='precision'&&local.started&&!local.submitted){local.pos=(Math.sin((performance.now()-local.base)/400)+1)*50;let el=$('needle');if(el)el.style.left=local.pos+'%'}if(config.game==='bomb'&&local.started&&!local.submitted&&n-local.lastBomb>1700){local.lastBomb=n;if(local.holder!==0)local.holder=Math.random()>.4?0:1;renderArena()}},80)}
 function playRace(){stop();if(!window.RaceMulti){wrap('<div class="status">正在加载多人跑酷…</div>');return}RaceMulti.enter({room,myId,socket,root})}
 function playBomb(){stop();const b=room?.bomb;if(!b){wrap('<div class="status">💣 数字炸弹正在准备…</div>');return}
