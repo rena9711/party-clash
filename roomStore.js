@@ -27,8 +27,8 @@ function save(room) {
   const previous = pending.get(code) || Promise.resolve();
   const next = previous.catch(() => {}).then(() =>
     pool.query(
-      'INSERT INTO party_rooms (code, payload, expires_at) VALUES ($1,$2::jsonb,NOW()+INTERVAL \'24 hours\') ON CONFLICT (code) DO UPDATE SET payload=EXCLUDED.payload, expires_at=EXCLUDED.expires_at',
-      [code, JSON.stringify(data)]
+      'INSERT INTO party_rooms (code, payload, expires_at) VALUES ($1,$2::jsonb,$3) ON CONFLICT (code) DO UPDATE SET payload=EXCLUDED.payload, expires_at=EXCLUDED.expires_at',
+      [code, JSON.stringify(data), new Date(data.createdAt + LIFETIME_MS)]
     )
   );
   pending.set(code, next);
