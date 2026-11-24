@@ -15,14 +15,12 @@ window.RoomCharacters = (() => {
         <b>${emoji} ${name}</b><small></small>
       </button>`).join('')}</div>
       <p id="character-feedback" role="status">${own?'当前角色已确认':'每个角色只能由一位玩家选择'}</p>
-      <button class="btn" id="confirm-character" type="button">确认选择</button>
     </section>`;
   }
 
   function bind(room, myId, socket) {
     if (draft?.code!==room.code) draft={code:room.code};
     const panel=document.querySelector('.character-picker');
-    const confirm=panel.querySelector('#confirm-character');
     const feedback=panel.querySelector('#character-feedback');
     const cards=[...panel.querySelectorAll('[data-character]')];
     const owned=new Set(room.players.filter(p=>p.id!==myId).map(p=>p.character));
@@ -38,16 +36,16 @@ window.RoomCharacters = (() => {
         card.setAttribute('aria-pressed',String(id===selected()));
         card.querySelector('small').textContent=used?'已被选择':id===own?'✓ 已确认':id===selected()?'✓ 已选中':'';
       }
-      confirm.disabled=confirming||!selected()||selected()===own;
     }
-    for(const card of cards)card.onclick=()=>{draft.id=card.dataset.character;feedback.textContent='';draw()};
-    confirm.onclick=()=>{
+    for(const card of cards)card.onclick=()=>{
+      if(card.dataset.character===own||confirming)return;
+      draft.id=card.dataset.character;feedback.textContent='正在选择…';
       confirming=true;
       draw();
       socket.timeout(3500).emit('race-character',selected(),(error,result)=>{
         confirming=false;
-        if(error||!result?.ok)feedback.textContent=result?.error||'连接失败，请重试';
-        else draft.id=null;
+        if(error||!result?.ok){draft.id=null;feedback.textContent=result?.error||'连接失败，请重试';}
+        else {draft.id=null;feedback.textContent='当前角色已确认';}
         draw();
       });
     };
