@@ -79,7 +79,6 @@ export function connectRaceView(diagnostics) {
   function send(input) {
     if(packet?.connected)window.parent.postMessage({type:'party-race-input', input}, origin);
   }
-  window.parent.postMessage({type:'party-race-ready'}, origin);
   const others=[];
   const result={others};
   return {

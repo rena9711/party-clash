@@ -381,7 +381,7 @@ function performAction(action) {
   }
 }
 if (multiplayer) {
-  const {connectRaceView} = await import('./room-client.mjs');
+  const {connectRaceView} = await import('./room-client.mjs?v=room-loading-2');
   network=connectRaceView(diagnostics);
   if(diagnostics)window.addEventListener('message',event=>{
     if(event.origin===location.origin&&event.source===window.parent&&event.data?.type==='party-race-rtt'&&
@@ -459,6 +459,7 @@ window.addEventListener('keyup',event=>keys.delete(event.key));
 window.addEventListener('blur',resetInput);
 window.addEventListener('deviceorientation',readSensor);
 window.addEventListener('resize',resize);
+if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(canvas);
 window.addEventListener('orientationchange',recalibrateOrientation);
 screen.orientation?.addEventListener?.('change',recalibrateOrientation);
 document.addEventListener('visibilitychange',()=>{
@@ -492,6 +493,7 @@ canvas.addEventListener('webglcontextrestored', () => {
 });
 useView(lightView);
 get('start').disabled = false;
+if (multiplayer) window.parent.postMessage({type:'party-race-ready'}, location.origin);
 async function loadRichScene() {
   const {createScene} = await import('./scene.mjs');
   richView = createScene(canvas,{cityMode,diagnostics:diagnosticMode?{

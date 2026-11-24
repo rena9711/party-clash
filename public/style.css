@@ -54,3 +54,6 @@ header .pill{flex:none;white-space:nowrap}
 .race-diagnostics-result summary{cursor:pointer}
 .race-diagnostics-result p{margin:6px 0}
 .race-diagnostics-result button{margin:2px 6px 2px 0;padding:5px 9px;background:#462e6a;color:#fff;border:1px solid #896bb4;border-radius:6px}
+
+.race-room-stage{position:fixed;inset:0;z-index:10;background:#171323}
+.race-room-stage [hidden]{display:none!important}
