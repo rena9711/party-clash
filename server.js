@@ -1,11 +1,13 @@
 const MemoryTournament = require('./memory-tournament');
 const {animals,validateName}=require('./public/player-identity');
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
-const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb'}));app.use(express.static('public'));
+const app=express(),server=http.createServer(app),io=new Server(server,{cors:{origin:'*'}});app.use(express.json({limit:'20kb',verify(req,_res,body){if(req.path==='/api/room-pass/wechat-notify')req.rawPaymentBody=body.toString('utf8')}}));app.use(express.static('public'));
 app.get('/race-v3/vendor/three.module.min.js', (_req, res) => {
   res.sendFile(require('node:path').join(__dirname, 'node_modules/three/build/three.module.min.js'));
 });
-const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase}=require('./roomStore');
+const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase,pool,expiresAt:roomExpiresAt}=require('./roomStore');
+const {createRoomPass}=require('./roomPass');
+const roomPass=createRoomPass(pool,process.env.ROOM_PASS_MODE);
 const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race','snake'];
 
 let RaceV3;
@@ -85,12 +87,12 @@ function finishSnake(r){for(const snake of r.snake?.players||[]){const p=r.playe
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,minePoints:r.game==='mine'?p.value:undefined,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,passMode:roomPass?.mode,passExpiresAt:paidRoom(r)?r.passExpiresAt:null,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,minePoints:r.game==='mine'?p.value:undefined,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
-const ROOM_LIFETIME=24*60*60*1000;
-function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(rooms.get(r.code)!==r)return;clearTimeout(r.timer);for(const interval of [r.raceInterval,r.snakeInterval,r.memoryInterval])clearInterval(interval);rooms.delete(r.code);io.to(r.code).emit('room-closed');for(const id of io.sockets.adapter.rooms.get(r.code)||[]){const peer=io.sockets.sockets.get(id);if(peer){peer.data.room=null;peer.leave(r.code)}}removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))},Math.max(0,r.createdAt+ROOM_LIFETIME-Date.now()));r.expireTimer.unref?.()}
-app.post('/api/my-rooms',(req,res)=>{res.set('Cache-Control','no-store');const token=validSession(req.body?.session),now=Date.now();if(!token)return res.json({now,rooms:[]});const list=[];for(const r of rooms.values()){const p=[...r.players.values()].find(p=>p.session===token);const expiresAt=r.createdAt+ROOM_LIFETIME;if(p&&expiresAt>now)list.push({code:r.code,hostName:r.players.get(r.host)?.name||'玩家',owner:p.id===r.host,online:onlineCount(r),expiresAt});}res.json({now,rooms:list.sort((a,b)=>a.expiresAt-b.expiresAt)})});
+const paidRoom=r=>Boolean(roomPass && r.passMode===roomPass.mode && r.passExpiresAt>Date.now());
+function roomExpiry(r){clearTimeout(r.expireTimer);r.expireTimer=setTimeout(()=>{if(rooms.get(r.code)!==r)return;clearTimeout(r.timer);for(const interval of [r.raceInterval,r.snakeInterval,r.memoryInterval])clearInterval(interval);rooms.delete(r.code);io.to(r.code).emit('room-closed');for(const id of io.sockets.adapter.rooms.get(r.code)||[]){const peer=io.sockets.sockets.get(id);if(peer){peer.data.room=null;peer.leave(r.code)}}removeRoom(r.code).catch(e=>console.error('Room delete failed:',e.message))},Math.max(0,roomExpiresAt(r)-Date.now()));r.expireTimer.unref?.()}
+app.post('/api/my-rooms',(req,res)=>{res.set('Cache-Control','no-store');const token=validSession(req.body?.session),now=Date.now();if(!token)return res.json({now,rooms:[]});const list=[];for(const r of rooms.values()){const p=[...r.players.values()].find(p=>p.session===token);const expiresAt=roomExpiresAt(r);if(p&&expiresAt>now)list.push({code:r.code,hostName:r.players.get(r.host)?.name||'玩家',owner:p.id===r.host,online:onlineCount(r),expiresAt});}res.json({now,rooms:list.sort((a,b)=>a.expiresAt-b.expiresAt)})});
 function get(socket){const code=socket.data.room;return code&&rooms.get(code)}
 function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitted=true;p.value=Math.max(0,Math.min(r.game==='tap'?Number.MAX_SAFE_INTEGER:100,Math.floor(Number(value)||0)));emit(r);if([...r.players.values()].every(x=>x.submitted))finish(r)}
 function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=r.game==='race'
@@ -140,17 +142,65 @@ function startMemory(r) {
   }, 80);
 }
 
-function startWhenReady(r){
+async function startWhenReady(r){
   const active=[...r.players.values()].filter(p=>p.online!==false);
-  if(r.phase==='rules'&&active.length>=1&&active.every(p=>p.ready))start(r,r.selectedGame);
+  if(r.phase!=='rules'||!active.length||!active.every(p=>p.ready)||r.checkingPass)return;
+  if(!roomPass||paidRoom(r))return start(r,r.selectedGame);
+  r.checkingPass=true;
+  let message;
+  try {
+    if(await roomPass.consumeTrial(active.map(p=>p.session))){
+      if(rooms.get(r.code)===r&&r.phase==='rules')start(r,r.selectedGame);
+      return;
+    }
+    message='有玩家的 3 局免费体验已用完，请房主购买开房卡后继续。';
+  } catch {
+    message='暂时无法核对免费体验次数，请重试。';
+  } finally {
+    r.checkingPass=false;
+  }
+  if(rooms.get(r.code)!==r)return;
+  r.phase=r.results?.length?'results':'lobby';
+  r.players.forEach(p=>p.ready=false);
+  emit(r);
+  io.to(r.code).emit('room-pass-required',message);
 }
 function markOffline(r,s){const p=r.players.get(s.id);if(!p)return;p.online=false;if(r.race)RaceV3.clearInput(r.race.runners.find(runner=>runner.id===s.id));if(r.snake){const sp=r.snake.players.find(x=>x.id===s.id);if(sp){sp.body=[];sp.respawnAt=0}}if(r.bomb&&r.phase==='playing'&&r.bomb&&!r.bomb.finished&&r.bomb.order[r.bomb.turn]===s.id){let next=r.bomb.turn;do{next=(next+1)%r.bomb.order.length}while(next!==r.bomb.turn&&r.players.get(r.bomb.order[next])?.online===false);r.bomb.turn=next;r.bomb.picks=0}if(onlineCount(r)===0)roomExpiry(r);emit(r);startWhenReady(r)}
 
+function applyRoomPass(room, result){
+  if(result?.expiresAt>Date.now()&&room.passExpiresAt!==result.expiresAt){
+    room.passExpiresAt=result.expiresAt;
+    room.passMode=roomPass.mode;
+    roomExpiry(room);
+    emit(room);
+  }
+}
+app.post('/api/room-pass/wechat-notify',async(req,res)=>{
+  if(!roomPass?.provider)return res.sendStatus(404);
+  let payment;
+  try {
+    payment=roomPass.provider.notification(new Headers(req.headers),req.rawPaymentBody);
+  } catch {
+    return res.sendStatus(400);
+  }
+  if(!payment)return res.sendStatus(400);
+  try {
+    const result=await roomPass.settle(payment);
+    if(!result)return res.sendStatus(400);
+    const room=rooms.get(result.code);
+    if(room?.createdAt===result.createdAt)applyRoomPass(room,result);
+    return res.sendStatus(204);
+  } catch {
+    return res.sendStatus(503);
+  }
+});
 const validSession=value=>typeof value==='string'&&value.length>=12&&value.length<=80?value:'';
 io.on('connection',s=>{
 s.on('memory-clock',ack=>{if(typeof ack==='function')ack(Date.now())});
 s.on('create',async(input,ack)=>{
   const {name,session}=input||{};
+  const token=validSession(session);
+  if(roomPass&&!token)return ack?.({error:'玩家身份无效，请刷新页面'});
   const identity=validateName(name);
   if(identity.error)return ack?.(identity);
   if(get(s))return ack?.({error:'请先离开当前房间'});
@@ -159,7 +209,7 @@ s.on('create',async(input,ack)=>{
   const r={code:c,host:s.id,phase:'lobby',round:0,game:null,selectedGame:'tap',players:new Map(),log:[],timer:null,expireTimer:null,createdAt:Date.now()};
   rooms.set(c,r);
   roomExpiry(r);
-  r.players.set(s.id,{id:s.id,name:identity.name,session:validSession(session),score:0,ready:false,online:true});
+  r.players.set(s.id,{id:s.id,name:identity.name,session:token,score:0,ready:false,online:true});
   s.join(c);
   s.data.room=c;
   try {
@@ -177,9 +227,10 @@ s.on('create',async(input,ack)=>{
 s.on('join',(input,ack)=>{
   const {code:raw,name,session,resume}=input||{};
   const c=String(raw||'').trim().toUpperCase(),r=rooms.get(c);
-  if(!r||r.createdAt+ROOM_LIFETIME<=Date.now())return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});
+  if(!r||roomExpiresAt(r)<=Date.now())return ack?.({error:'房间已失效，请房主重新建立房间并分享新链接'});
   if(get(s)&&get(s)!==r)return ack?.({error:'请先离开当前房间'});
   const token=validSession(session);
+  if(roomPass&&!token)return ack?.({error:'玩家身份无效，请刷新页面'});
   const old=token&&[...r.players.values()].find(player=>player.session===token);
   if(resume&&!old)return ack?.({error:'未找到原玩家，请确认昵称后加入'});
   if(get(s)&&!old)return ack?.({error:'请先离开当前房间'});
@@ -218,6 +269,33 @@ s.on('join',(input,ack)=>{
   if(r.phase==='playing'&&r.game==='snake')s.emit('snake-state',snakeSnapshot(r));
   if(r.phase==='playing'&&r.game==='race')s.emit('race-state',RaceV3.snapshotRace(r.race,s.id,Date.now()));
 });
+s.on('room-pass',async(input,ack)=>{
+  if(typeof ack!=='function')return;
+  const room=get(s);
+  const session=room?.players.get(s.id)?.session;
+  if(!roomPass||!room||!session)return ack({error:'暂时无法使用开房卡'});
+  const action=input?.action;
+  if(action==='status'){
+    try {
+      return ack(await roomPass.status(room,session));
+    } catch {
+      return ack({error:'无法读取开房卡状态，请重试'});
+    }
+  }
+  if(room.host!==s.id||!['begin','check'].includes(action))return ack({error:'仅房主可以购买开房卡'});
+  if(room.checkoutBusy||Date.now()-(room.checkoutAt||0)<1500)return ack({error:'正在核对订单，请稍后重试'});
+  room.checkoutBusy=true;
+  room.checkoutAt=Date.now();
+  try {
+    const result=await roomPass[action](room,session);
+    applyRoomPass(room,result);
+    return ack(result||{error:'订单未能确认，请重试'});
+  } catch {
+    return ack({error:'暂时无法核对订单，请稍后重试'});
+  } finally {
+    room.checkoutBusy=false;
+  }
+});
 s.on('race-character',(character,ack)=>{
   const room=get(s),player=room?.players.get(s.id);
   if(!player||!['lobby','results'].includes(room.phase)||room.selectedGame!=='race'||!animals.some(([id])=>id===character)){
@@ -233,7 +311,11 @@ s.on('race-character',(character,ack)=>{
 s.on('leave-room',ack=>{
   const room=get(s);
   if(!room)return ack?.({error:'房间已关闭'});
-  if(room.host===s.id){
+  if(room.host===s.id&&roomPass){
+    s.leave(room.code);
+    s.data.room=null;
+    markOffline(room,s);
+  }else if(room.host===s.id){
     clearTimeout(room.expireTimer);
     clearTimeout(room.timer);
     for(const interval of [room.memoryInterval,room.snakeInterval,room.raceInterval])clearInterval(interval);
@@ -342,4 +424,4 @@ app.post('/api/challenge/:id/submit',(req,res)=>{const c=db.challenges.find(x=>x
 app.get('/api/rivals/:id',(req,res)=>{const id=req.params.id;if(!sid(id))return res.status(400).json({error:'无效玩家'});const rivals=new Map();for(const m of db.matches){if(m.a!==id&&m.b!==id)continue;const other=m.a===id?m.b:m.a;const x=rivals.get(other)||{id:other,wins:0,losses:0,draws:0,last:0};const a=m.a===id?m.aScore:m.bScore,b=m.a===id?m.bScore:m.aScore;if(a>b)x.wins++;else if(a<b)x.losses++;else x.draws++;x.last=m.at;rivals.set(other,x)}res.json([...rivals.values()].sort((a,b)=>b.last-a.last).map(x=>({...x,name:display(x.id)})))});
 app.get('/api/health',(req,res)=>res.json({ok:true,version:'0.9-room-storage',roomStorage:hasDatabase?'postgres':'memory',roomCount:rooms.size}));
 
-const PORT=process.env.PORT||3000;import('./race-v3-room.mjs').then(core=>{RaceV3=core;return loadSavedRooms(rooms)}).then(()=>{for(const r of rooms.values())roomExpiry(r);server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))}).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});
+const PORT=process.env.PORT||3000;import('./race-v3-room.mjs').then(core=>{RaceV3=core;return loadSavedRooms(rooms)}).then(()=>roomPass?.init()).then(()=>{for(const r of rooms.values())roomExpiry(r);server.listen(PORT,()=>console.log('Party Clash running on http://localhost:'+PORT))}).catch(err=>{console.error('Persistent room store unavailable:',err);process.exit(1)});
