@@ -7,7 +7,8 @@ app.get('/race-v3/vendor/three.module.min.js', (_req, res) => {
 });
 const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabase,pool,expiresAt:roomExpiresAt}=require('./roomStore');
 const {createRoomPass}=require('./roomPass');
-const roomPass=createRoomPass(pool,process.env.ROOM_PASS_MODE);
+// Free beta by default; explicitly enable commercial mode only after approval.
+const roomPass=process.env.PARTY_CLASH_ENABLE_PAYMENTS==='true'?createRoomPass(pool,process.env.ROOM_PASS_MODE):null;
 const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race','snake'];
 
 let RaceV3;
@@ -311,7 +312,7 @@ s.on('race-character',(character,ack)=>{
 s.on('leave-room',ack=>{
   const room=get(s);
   if(!room)return ack?.({error:'房间已关闭'});
-  if(room.host===s.id&&roomPass){
+  if(room.host===s.id&&hasDatabase){
     s.leave(room.code);
     s.data.room=null;
     markOffline(room,s);
