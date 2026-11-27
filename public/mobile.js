@@ -93,6 +93,7 @@ function showBlast(message,points){
  stage='exploding';const arena=$('arena');
  arena.querySelectorAll('button,input').forEach(control=>control.disabled=true);
  const blast=document.createElement('div');blast.className='mine-blast'+(game==='mine'?' mine-detonation':'');blast.setAttribute('role','status');
+ window.PartySound?.play('blast');
  blast.innerHTML=(game==='mine'?MineBoard.face():'')+'<strong>💥</strong><b>'+message+'</b>';arena.append(blast);
  timeout=setTimeout(()=>finish(points),game==='mine'?1150:1050);
 }
@@ -106,6 +107,8 @@ function updateSoloMemory(){
  const answering=now>=extra.answerAt;
  if(now>=extra.endsAt){endSoloMemory('时间到');return}
  const lit=!answering&&elapsed>=0&&elapsed%SOLO_MEMORY_STEP<SOLO_MEMORY_FLASH?extra.seq[Math.floor(elapsed/SOLO_MEMORY_STEP)]:-1;
+ if(lit>=0&&lit!==extra.lastLit)window.PartySound?.play('memory');
+ extra.lastLit=lit;
  const status=$('solo-memory-status');
  if(status)status.textContent=answering?'剩余 '+Math.ceil((extra.endsAt-now)/1000)+' 秒 · 已答对 '+extra.input+' / 4 格':elapsed<0?'准备 '+Math.ceil(-elapsed/1000)+' 秒':'记住发光顺序';
  document.querySelectorAll('[data-cell]').forEach(cell=>{

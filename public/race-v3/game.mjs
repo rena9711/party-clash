@@ -182,6 +182,7 @@ function resetInput() {
 function play() {
   if (!multiplayer) {
     run=newRun();
+    window.PartySound?.play('start');
     if(createDiagnostics){
       diagnostics.dispose();
       diagnostics=createDiagnostics({city:cityMode,multiplayer});
@@ -226,6 +227,7 @@ function updateHud(remaining = DURATION-run.time) {
   }
 }
 function pulse(id,flicker) {
+  window.PartySound?.play(id==='pickup'?'star':'fail');
   const element=get(id);
   if(id==='effect')element.dataset.kind='';
   else element.classList.remove('active');
@@ -234,6 +236,7 @@ function pulse(id,flicker) {
   else element.classList.add('active');
 }
 function finish() {
+  window.PartySound?.play('finish');
   updateHud();
   get('final-distance').textContent=Math.round(run.distance)+' 米';
   get('final-score').textContent='本局得分 '+(run.stars*10)+' 分';

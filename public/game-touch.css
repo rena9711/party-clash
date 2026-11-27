@@ -83,3 +83,15 @@ input[type="range"]:active::-webkit-slider-thumb{box-shadow:0 0 0 5px #ffc0df77}
 .pc-sound-toggle{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:5px 9px;border-radius:9px;border:1px solid #b68baa;background:#30233d;color:#ffe0ef;font:600 12px system-ui;white-space:nowrap;touch-action:manipulation}
 .pc-sound-toggle[aria-pressed="false"]{color:#b6a8bc;border-color:#706278}
 .pc-sound-compact{font-size:17px;min-width:34px}
+
+@media (prefers-reduced-motion:no-preference){
+  .punishment{animation:pc-punishment-shake .4s .7s ease-out both}
+}
+@keyframes pc-punishment-shake{
+  0%,100%{transform:none}
+  12%{transform:translate(-9px,3px) scale(1.055)}
+  26%{transform:translate(8px,-3px) scale(1.05)}
+  42%{transform:translate(-6px,2px) scale(1.04)}
+  58%{transform:translate(4px,-2px) scale(1.03)}
+  76%{transform:translate(-2px,1px) scale(1.015)}
+}

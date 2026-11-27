@@ -90,6 +90,8 @@ window.MemoryMulti = (() => {
       if (cue.off <= now) view.cues.delete(start);
       else if (start <= now) lit = cue.cell;
     }
+    if (lit !== null && lit !== view.lastLit) window.PartySound?.play('memory');
+    view.lastLit = lit;
     const locked = !answering || !player || player.done;
     for (const [i, button] of view.cells.entries()) {
       button.classList.toggle('is-lit', i === lit);
