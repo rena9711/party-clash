@@ -69,7 +69,7 @@ function raceReady(){
  return room.players.filter(player=>player.online!==false).every(player=>player.character);
 }
 function stackModeMarkup(mode,host,multi){
- return '<h3 style="margin:0 0 12px;color:#ffc0df">🧱 选择叠叠乐模式</h3><div style="display:grid;gap:10px"><button type="button" class="tile '+(mode==='race'?'selected':'')+'" data-stack-mode="race" '+(!host?'disabled':'')+' style="text-align:left;padding:14px;min-height:72px">⚡ 个人竞速 '+(mode==='race'?'✓':'')+'<br><small>各自叠塔 · 45秒 · 最高者获胜</small></button><button type="button" class="tile '+(mode==='turn'?'selected':'')+'" data-stack-mode="turn" '+(!host?'disabled':'')+' style="text-align:left;padding:14px;min-height:72px">🔥 轮流挑战 '+(mode==='turn'?'✓':'')+'<br><small>共用一座塔 · 每人一块 · 谁失误谁输</small></button></div>'+(!multi?'<p class="muted">可先选择轮流挑战，至少2位玩家在线即可开始。</p>':'')+(host?'':'<p class="muted">由房主选择模式</p>');
+ return '<h3 style="margin:0 0 12px;color:#ffc0df">🧱 选择叠叠乐模式</h3><div style="display:grid;gap:10px"><button type="button" class="tile '+(mode==='race'?'selected':'')+'" data-stack-mode="race" '+(!host?'disabled':'')+' style="text-align:left;padding:14px;min-height:72px">⚡ 层层攀升 '+(mode==='race'?'✓':'')+'<br><small>各自叠塔 · 45秒 · 越高越强</small></button><button type="button" class="tile '+(mode==='turn'?'selected':'')+'" data-stack-mode="turn" '+(!host?'disabled':'')+' style="text-align:left;padding:14px;min-height:72px">🔥 叠你一刀 '+(mode==='turn'?'✓':'')+'<br><small>共用一座塔 · 故意切细 · 谁失误谁输</small></button></div>'+(!multi?'<p class="muted">可先选择叠你一刀，至少2位玩家在线即可开始。</p>':'')+(host?'':'<p class="muted">由房主选择模式</p>');
 }
 function openStackMode(){
  document.getElementById('stack-mode-dialog')?.remove();
@@ -109,7 +109,7 @@ const rules={
 function showRules(){document.getElementById('stack-mode-dialog')?.remove();
  const players=room.players.filter(p=>p.online!==false);
  const ready=players.find(p=>p.id===myId)?.ready;
- wrap('<section class="panel center"><h2>'+games.find(g=>g[0]===choice)[2]+'</h2><p>'+(choice==='stack'?(room.stackMode==='turn'?'随机首位，依序每人叠一块。每次10秒，完全错位或超时者输，全局结束。':'每人一座塔，45秒内成功堆叠最多者获胜；失误后可观战。'):rules[choice])+'</p><button class="btn" id="confirm-start" '+(ready?'disabled':'')+'>'+(ready?'等待其他玩家':'开始')+'</button><p>'+players.filter(p=>p.ready).length+' / '+players.length+' 人已准备</p></section><button class="btn secondary" id="leave-room">离开房间</button>');
+ wrap('<section class="panel center"><h2>'+games.find(g=>g[0]===choice)[2]+'</h2><p>'+(choice==='stack'?(room.stackMode==='turn'?'随机首位，依序每人叠一块。每次10秒，故意切细给下一位制造难题；完全错位或超时者输，全局结束。':'每人一座塔，45秒内成功堆叠最多者获胜；失误后可观战。'):rules[choice])+'</p><button class="btn" id="confirm-start" '+(ready?'disabled':'')+'>'+(ready?'等待其他玩家':'开始')+'</button><p>'+players.filter(p=>p.ready).length+' / '+players.length+' 人已准备</p></section><button class="btn secondary" id="leave-room">离开房间</button>');
  $('confirm-start').onclick=()=>socket.emit('rules-ready',{round:room.round});
  $('leave-room').onclick=leaveRoom;
  if(room.passMode&&room.host===myId)$('leave-room').textContent='返回大厅';
