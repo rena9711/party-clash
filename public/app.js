@@ -16,8 +16,10 @@ function emitAck(event,data,userInitiated=true){
   myId=res.id;
   if(res.code){
    localStorage.setItem('clash-room-'+res.code,'joined');
-   const roomUrl='/multiplayer.html?room='+encodeURIComponent(res.code);
+   const inviteUrl=roomInviteUrl(res.code);
+   const roomUrl=inviteUrl.pathname+inviteUrl.search;
    history.replaceState({},'', window.RaceMulti?.route(roomUrl)??roomUrl);
+   document.querySelector('meta[property="og:url"]')?.setAttribute('content',inviteUrl.href);
   }
   if(event==='create'&&games.some(g=>g[0]===requestedGame))socket.emit('select-game',{game:requestedGame});
   if(room)showRoom();
@@ -151,7 +153,27 @@ function revealLoser(ordered){
  overlay.querySelector('button').onclick=()=>overlay.remove();
 }
 function showRoom(){if(!room){window.StackRoom?.leave();return home()}if(room.phase!=='playing'||room.game!=='stack')window.StackRoom?.leave();if(room.phase!=='playing'||room.game!=='race')window.RaceMulti?.leave();if(room.phase!=='playing'||room.game!=='snake')window.SnakeRoom?.leave();if(room.phase!=='playing'||room.game!=='memory')window.MemoryMulti?.leave();let host=room.host===myId;choice=games.some(g=>g[0]===room.selectedGame)?room.selectedGame:'tap';if(room.phase==='rules')return showRules();if(room.phase==='playing'){if(!config||config.game!==room.game){config={game:room.game,startsAt:room.startsAt,endsAt:room.endsAt,seed:0};}return play()}if(room.phase==='results'){return results()}wrap(`<div class="center"><span class="pill">房间码：${room.code}</span><p class="muted">点击下方按钮，分享专属入场链接</p><h2>准备开战？</h2><p class="muted">${room.players.filter(p=>p.online!==false).length}/10 位玩家在线</p></div><div class="panel"><b>玩家列表</b>${room.players.map(p=>`<div class="person"><span>${p.id===room.host?'👑':'🎮'} ${safe(p.name)}${p.id===myId?' (你)':''}${p.online===false?'（暂时离线）':''}</span><b>${p.score}分</b></div>`).join('')}</div>${gameChooser(host,false)}${choice==='race'?RoomCharacters.markup(room,myId):''}<section class="room-pass" id="room-pass" hidden></section><button class="btn secondary" id="copy">复制邀请链接</button><button class="btn secondary" id="leave-room">离开房间</button>`);document.querySelectorAll('[data-game]').forEach(b=>b.onclick=()=>{if(room.host!==myId)return;if(b.dataset.game==='stack'){openStackMode();return}choice=b.dataset.game;socket.emit('select-game',{game:choice});showRoom()});bindRoomControls(host);$('copy').onclick=()=>shareRoom()}
-async function shareRoom(){const url=location.origin+'/?room='+room.code;try{if(navigator.share){await navigator.share({title:'大乱斗 · 邀请入场',text:'点击链接直接加入房间！房间码：'+room.code,url});return}}catch(e){if(e.name==='AbortError')return}try{await navigator.clipboard.writeText(url);alert('邀请链接已复制，发给好友即可直接入场')}catch(e){prompt('复制入场链接（房间码：'+room.code+'）',url)}}
+function roomInviteUrl(code){
+ const url=new URL('/multiplayer.html',location.origin);
+ url.searchParams.set('room',code);
+ const version=document.querySelector('meta[name="party-clash:invite-version"]')?.content;
+ if(version)url.searchParams.set('invite',version);
+ return url;
+}
+async function shareRoom(){
+ const code=room?.code;
+ if(!code)return;
+ const url=roomInviteUrl(code).href;
+ const title=document.title;
+ const text=document.querySelector('meta[property="og:description"]')?.content;
+ try{
+  if(navigator.share){await navigator.share({title,text,url});return}
+ }catch(e){if(e.name==='AbortError')return}
+ try{
+  await navigator.clipboard.writeText(url);
+  alert('邀请链接已复制，发给好友即可直接入场');
+ }catch(e){prompt('复制入场链接（房间码：'+code+'）',url)}
+}
 function personalResult(ordered){
  const index=ordered.findIndex(p=>p.id===myId);
  if(index<0)return '';
