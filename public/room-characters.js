@@ -24,7 +24,7 @@ window.RoomCharacters = (() => {
     const feedback=panel.querySelector('#character-feedback');
     const cards=[...panel.querySelectorAll('[data-character]')];
     const owned=new Set(room.players.filter(p=>p.id!==myId).map(p=>p.character));
-    const own=room.players.find(player=>player.id===myId)?.character;
+    let own=room.players.find(player=>player.id===myId)?.character;
     const selected=()=>owned.has(draft.id)?own:(draft.id||own);
     let confirming=false;
 
@@ -34,7 +34,7 @@ window.RoomCharacters = (() => {
         const used=owned.has(id);
         card.disabled=used||confirming;
         card.setAttribute('aria-pressed',String(id===selected()));
-        card.querySelector('small').textContent=used?'已被选择':id===own?'✓ 已确认':id===selected()?'✓ 已选中':'';
+        const tag=card.querySelector('small');tag.textContent=used?'已选择':id===own?'✓ 已选择（你）':id===selected()?'选择中…':'';tag.className=used||id===own?'character-taken':id===selected()?'character-pending':'';card.classList.toggle('is-taken',used);
       }
     }
     for(const card of cards)card.onclick=()=>{
@@ -45,7 +45,7 @@ window.RoomCharacters = (() => {
       socket.timeout(3500).emit('race-character',selected(),(error,result)=>{
         confirming=false;
         if(error||!result?.ok){draft.id=null;feedback.textContent=result?.error||'连接失败，请重试';}
-        else {draft.id=null;feedback.textContent='当前角色已确认';}
+        else {own=card.dataset.character;draft.id=null;feedback.textContent='当前角色已选择';}
         draw();
       });
     };
