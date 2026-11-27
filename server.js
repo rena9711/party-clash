@@ -362,9 +362,9 @@ s.on('leave-room',ack=>{
   }
   ack?.({ok:true});
 });
-s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&['lobby','results'].includes(r.phase)&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
+s.on('select-game',({game,mode}={})=>{const r=get(s);if(r&&r.host===s.id&&['lobby','results'].includes(r.phase)&&GAMES.includes(game)){r.selectedGame=game;if(game==='stack'&&['race','turn'].includes(mode))r.stackMode=mode;emit(r)}});
 s.on('stack-mode',({mode}={})=>{const r=get(s);if(r&&r.host===s.id&&['lobby','results'].includes(r.phase)&&r.selectedGame==='stack'&&['race','turn'].includes(mode)){r.stackMode=mode;emit(r)}});
-s.on('stack-drop',({round,seq,pressed}={},ack)=>{const r=get(s);if(!r||r.phase!=='playing'||r.game!=='stack'||r.round!==round)return ack?.({ok:false});const now=Date.now();if(Stack.tick(r.stack,now)){finishStack(r);return ack?.({ok:false})}const ok=Stack.act(r.stack,s.id,seq,now,pressed);ack?.({ok});if(ok)stackUpdate(r)});
+s.on('stack-drop',({round,seq,pressed}={},ack)=>{const r=get(s);if(!r||r.phase!=='playing'||r.game!=='stack'||r.round!==round)return ack?.({ok:false});const now=Date.now();if(Stack.tick(r.stack,now)){finishStack(r);return ack?.({ok:false})}const ok=Stack.act(r.stack,s.id,seq,now,pressed);ack?.({ok,game:r.stack});if(ok)stackUpdate(r)});
 s.on('start',({game}={})=>{
   const r=get(s);
   if(!r||r.host!==s.id||onlineCount(r)<1||!['lobby','results'].includes(r.phase))return;
