@@ -121,7 +121,7 @@ function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clear
   r.endsAt=r.race.endsAt;
 }if(r.game==='stack'){
   const ids=[...r.players.values()].filter(p=>p.online!==false).map(p=>p.id),mode=r.stackMode==='turn'&&ids.length>1?'turn':'race';
-  r.stack=Stack.make(mode,ids,r.startsAt,mode==='turn'?rand(ids.length):0);
+  r.stack=Stack.make(mode,ids,r.startsAt,mode==='turn'?rand(ids.length):0,crypto.randomBytes(4).readUInt32LE());
   r.endsAt=r.stack.deadline;
 }if(r.game==='memory'){
   r.memory=MemoryTournament.create([...r.players.values()].filter(p=>p.online!==false).map(p=>p.id));
