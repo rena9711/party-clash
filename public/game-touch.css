@@ -71,3 +71,11 @@ body.snake-room-active{overflow:hidden;overscroll-behavior:none}
 @keyframes cat-result{from{opacity:0;visibility:hidden}to{opacity:1;visibility:visible}}
 .mine-detonation::before{content:"";position:absolute;inset:0;background:#190c1dcc;z-index:1;pointer-events:none;animation:cat-result .28s .72s both}
 @media(prefers-reduced-motion:reduce){.mine-detonation .mine-cat{transform:translate(-50%,-50%);animation:none}.mine-detonation::before,.mine-detonation strong,.mine-detonation h2,.mine-detonation button,.mine-detonation>b{animation:none}}
+
+/* Local, bounded input effects. No native tap overlay, no layout changes. */
+.pc-touch-ring{position:fixed;z-index:9999;display:block;pointer-events:none;box-sizing:border-box;border:3px solid #ffc0e3;box-shadow:0 0 9px currentColor,inset 0 0 6px currentColor;opacity:0;will-change:transform,opacity}
+.pc-ring-fallback{animation:pc-touch-ring .22s ease-out}
+@keyframes pc-touch-ring{0%{opacity:.95;transform:scale(.97)}100%{opacity:0;transform:scale(1.08)}}
+#stick:active,.snake-stick:active{border-color:#ffc0df}
+input[type="range"]:active::-webkit-slider-thumb{box-shadow:0 0 0 5px #ffc0df77}
+@media(prefers-reduced-motion:reduce){.pc-ring-fallback{animation-duration:.1s}}
