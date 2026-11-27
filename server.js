@@ -89,7 +89,7 @@ function finishSnake(r){for(const snake of r.snake?.players||[]){const p=r.playe
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,stackMode:r.stackMode||'race',stack:r.game==='stack'&&r.phase==='playing'?r.stack:undefined,serverNow:Date.now(),passMode:roomPass?.mode,passExpiresAt:paidRoom(r)?r.passExpiresAt:null,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,minePoints:r.game==='mine'?p.value:undefined,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,roundPlayerIds:r.roundPlayerIds,stackMode:r.stackMode||'race',stack:r.game==='stack'&&r.phase==='playing'?r.stack:undefined,serverNow:Date.now(),passMode:roomPass?.mode,passExpiresAt:paidRoom(r)?r.passExpiresAt:null,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,minePoints:r.game==='mine'?p.value:undefined,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
 const paidRoom=r=>Boolean(roomPass && r.passMode===roomPass.mode && r.passExpiresAt>Date.now());
@@ -116,7 +116,7 @@ function finishStack(r){
  emit(r);
 }
 function stackUpdate(r){if(r.stack.finished)return finishStack(r);io.to(r.code).emit('stack-state',{round:r.round,game:r.stack,now:Date.now()})}
-function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=['mine','bomb'].includes(r.game)?newBombGame(r):null;if(r.game==='mine'){r.bomb.secret=1+rand(20);r.bomb.picks=0};r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.stack=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.correctCells=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
+function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.roundPlayerIds=[...r.players.values()].filter(p=>p.online!==false).map(p=>p.id);r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=['mine','bomb'].includes(r.game)?newBombGame(r):null;if(r.game==='mine'){r.bomb.secret=1+rand(20);r.bomb.picks=0};r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.stack=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.correctCells=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
   r.race=RaceV3.createRace([...r.players.values()].filter(p=>p.online!==false),r.seed,r.startsAt);
   r.endsAt=r.race.endsAt;
 }if(r.game==='stack'){
@@ -271,6 +271,7 @@ s.on('join',(input,ack)=>{
       if(oldSocket){oldSocket.leave(c);oldSocket.data.room=null}
       r.players.delete(old.id);
       if(r.host===old.id)r.host=s.id;
+      if(Array.isArray(r.roundPlayerIds))r.roundPlayerIds=r.roundPlayerIds.map(id=>id===old.id?s.id:id);
       if(r.race)for(const runner of r.race.runners)if(runner.id===old.id){runner.id=s.id;RaceV3.clearInput(runner)}
       if(r.bomb)r.bomb.order=r.bomb.order.map(id=>id===old.id?s.id:id);
       if(r.snake)for(const player of r.snake.players)if(player.id===old.id){
