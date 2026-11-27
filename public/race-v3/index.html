@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#130d29">
   <title>跑得快｜大乱斗</title>
   <style>html,body{margin:0;background:#171323;color:#fbe6ef;font:16px system-ui}#game{position:relative}#scene,#effect,.light-scene{position:absolute;inset:0}:where(#intro){position:relative;padding:16px}a{color:#ffc6e2}[hidden]{display:none!important}</style>
-  <link rel="stylesheet" media="print" onload="this.media='all'" href="/game-touch.css?v=feedback-1"><link rel="stylesheet" media="print" onload="this.media='all'" href="./style.css">
+  <link rel="stylesheet" media="print" onload="this.media='all'" href="/game-touch.css?v=sound-1"><link rel="stylesheet" media="print" onload="this.media='all'" href="./style.css">
   <script type="module" src="./game.mjs?v=race-center-1"></script>
-<style id="pc-touch-critical">html,body,body *{-webkit-tap-highlight-color:rgba(0,0,0,0)!important}button,[role="button"],canvas{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}button:not(:focus-visible),[role="button"]:not(:focus-visible){outline:none}button:focus-visible,[role="button"]:focus-visible{outline:2px solid #ffc0df;outline-offset:3px}.tap{touch-action:manipulation}</style><script defer src="/game-feedback.js?v=1"></script></head>
+<style id="pc-touch-critical">html,body,body *{-webkit-tap-highlight-color:rgba(0,0,0,0)!important}button,[role="button"],canvas{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}button:not(:focus-visible),[role="button"]:not(:focus-visible){outline:none}button:focus-visible,[role="button"]:focus-visible{outline:2px solid #ffc0df;outline-offset:3px}.tap{touch-action:manipulation}</style><script defer src="/game-sound.js?v=1"></script><script defer src="/game-feedback.js?v=2"></script></head>
 <body>
   <main id="game">
     <canvas id="scene" aria-label="霓虹城市中的三维跑道"></canvas>
@@ -18,7 +18,7 @@
       <span>⏱ <b id="time">45</b> 秒</span>
       <span id="rank" hidden></span>
       <button id="boost" type="button" hidden>加速</button>
-      <button id="pause" type="button" aria-label="暂停">Ⅱ</button>
+      <button class="pc-sound-toggle pc-sound-compact" data-pc-sound style="pointer-events:auto" type="button" aria-label="游戏音效">🔊</button><button id="pause" type="button" aria-label="暂停">Ⅱ</button>
     </div>
     <div id="nameplates" hidden></div>
     <details id="room-leaderboard" hidden><summary>排行榜</summary><ol id="room-leaderboard-list"></ol></details>
@@ -35,7 +35,7 @@
       <h1>跑得快</h1>
       <p>左倾向左，右倾向右，回正停止。向上滑动跳跃。</p>
       <p id="mode">开始时自动校准；无感应器时可用触控方向键。</p>
-      <div class="settings">
+      <div class="settings"><button type="button" class="pc-sound-toggle pc-sound-compact" data-pc-sound aria-label="游戏音效">🔊</button>
         <label id="solo-character-label">角色 <select id="solo-character"></select></label>
         <label>灵敏度 <select id="sensitivity"><option value="low">低</option><option value="medium" selected>中</option><option value="high">高</option></select></label>
       </div>
