@@ -9,7 +9,8 @@ const {init:loadSavedRooms,save:saveRoom,remove:removeRoom,configured:hasDatabas
 const {createRoomPass}=require('./roomPass');
 // Free beta by default; explicitly enable commercial mode only after approval.
 const roomPass=process.env.PARTY_CLASH_ENABLE_PAYMENTS==='true'?createRoomPass(pool,process.env.ROOM_PASS_MODE):null;
-const rooms=new Map(),GAMES=['tap','precision','reaction','memory','bomb','mine','race','snake'];
+const Stack=require('./public/stack-core');
+const rooms=new Map(),GAMES=['tap','precision','stack','memory','bomb','mine','race','snake'];
 
 let RaceV3;
 function broadcastRace(r, now = Date.now()) {
@@ -88,7 +89,7 @@ function finishSnake(r){for(const snake of r.snake?.players||[]){const p=r.playe
 
 const rand=(n)=>crypto.randomInt(n),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase();
 const clean=s=>String(s||'Player').trim().slice(0,16).replace(/[<>]/g,'');
-function publicRoom(r){return {code:r.code,host:r.host,passMode:roomPass?.mode,passExpiresAt:paidRoom(r)?r.passExpiresAt:null,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,minePoints:r.game==='mine'?p.value:undefined,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
+function publicRoom(r){return {code:r.code,host:r.host,stackMode:r.stackMode||'race',stack:r.game==='stack'&&r.phase==='playing'?r.stack:undefined,serverNow:Date.now(),passMode:roomPass?.mode,passExpiresAt:paidRoom(r)?r.passExpiresAt:null,phase:r.phase,round:r.round,game:r.game,selectedGame:GAMES.includes(r.selectedGame)?r.selectedGame:'tap',players:[...r.players.values()].map(p=>({id:p.id,name:p.name,character:p.character??null,score:p.score,minePoints:r.game==='mine'?p.value:undefined,ready:p.ready,submitted:p.submitted,online:p.online!==false})),endsAt:r.endsAt,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,race:r.game==='race'?{runners:r.race?.runners?.map(p=>({id:p.id,name:p.name}))}:null,bomb:['mine','bomb'].includes(r.game)?bombPublic(r):null,snake:r.game==='snake'?{players:r.snake?.players?.map(p=>({id:p.id,name:p.name}))}:null,log:r.log.slice(-6),results:r.results||[]}}
 function emit(r){io.to(r.code).emit('room',publicRoom(r));saveRoom(r).catch(e=>console.error('Room save failed:',e.message))}
 function onlineCount(r){return [...r.players.values()].filter(p=>p.online!==false).length}
 const paidRoom=r=>Boolean(roomPass && r.passMode===roomPass.mode && r.passExpiresAt>Date.now());
@@ -99,13 +100,33 @@ function submit(r,p,value){if(r.phase!=='playing'||p.submitted)return;p.submitte
 function finish(r){if(r.phase!=='playing')return;clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.raceInterval=null;r.snakeInterval=null;if(r.game==='race')finishRace(r);if(r.game==='snake')finishSnake(r);if(r.game==='bomb'&&!r.bomb?.finished){r.bomb.finished=true;for(const p of r.players.values()){p.value=50;p.submitted=true}}r.phase='results';const ordered=r.game==='race'
  ? RaceV3.standings(r.race).map(runner=>r.players.get(runner.id))
  : [...r.players.values()].sort((a,b)=>b.value-a.value);const points=[100,70,50,30,20,10,5,3,2,1];r.results=ordered.map((p,i)=>({id:p.id,name:p.name,character:r.game==='race'?p.character:undefined,value:p.value,foods:r.game==='snake'?r.snake?.players.find(s=>s.id===p.id)?.foods:undefined,exploded:['mine','bomb'].includes(r.game)&&r.bomb?.loser===p.id,stars:r.game==='race'?r.race?.runners.find(x=>x.id===p.id)?.run.stars:undefined,distance:r.game==='race'?Math.round(r.race?.runners.find(x=>x.id===p.id)?.run.distance||0):undefined,earned:r.game==='mine'?p.value:r.game==='bomb'&&r.bomb?.loser?(p.id===r.bomb.loser?0:100):points[i]}));ordered.forEach((p,i)=>p.score+=r.results[i].earned);emit(r)}
-function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=['mine','bomb'].includes(r.game)?newBombGame(r):null;if(r.game==='mine'){r.bomb.secret=1+rand(20);r.bomb.picks=0};r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.correctCells=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
+function finishStack(r){
+ if(r.phase!=='playing'||r.game!=='stack'||!r.stack?.finished)return;
+ clearTimeout(r.timer);r.timer=null;
+ const g=r.stack,ids=Stack.standings(g),points=[100,70,50,30,20,10,5,3,2,1];
+ r.phase='results';
+ r.results=ids.map((id,i)=>{
+  const p=r.players.get(id),t=g.towers[id];
+  const rank=g.mode==='race'?ids.findIndex(other=>{const a=g.towers[other];return a.n===t.n&&a.perfect===t.perfect&&Stack.area(a)===Stack.area(t)}):0;
+  const lost=g.mode==='turn'?id===g.loser:ids.length>1&&rank===ids.length-1;
+  const earned=g.mode==='turn'?(lost?0:100):points[rank];
+  p.value=g.mode==='turn'?g.counts[id]:t.n;p.score+=earned;p.submitted=true;
+  return {id,name:p.name,value:p.value,earned,stackLost:lost,stackMode:g.mode,stackTotal:g.mode==='turn'?g.towers.shared.n:undefined,perfect:t?.perfect};
+ });
+ emit(r);
+}
+function stackUpdate(r){if(r.stack.finished)return finishStack(r);io.to(r.code).emit('stack-state',{round:r.round,game:r.stack,now:Date.now()})}
+function start(r,game){clearTimeout(r.timer);clearInterval(r.raceInterval);clearInterval(r.snakeInterval);r.game=GAMES.includes(game)?game:'tap';r.round++;r.phase='playing';r.startsAt=Date.now()+3000;r.race=null;r.bomb=['mine','bomb'].includes(r.game)?newBombGame(r):null;if(r.game==='mine'){r.bomb.secret=1+rand(20);r.bomb.picks=0};r.snake=r.game==='snake'?makeSnake(r):null;r.memory=null;r.stack=null;r.endsAt=r.startsAt+(r.game==='snake'?60000:r.game==='bomb'?180000:12000);r.results=[];r.log=[];r.players.forEach(p=>{p.submitted=false;p.value=0;p.correctCells=0;p.ready=false;p.shield=false;p.attackCount=0;p.effects=[]});r.seed=rand(100000);if(r.game==='race'){
   r.race=RaceV3.createRace([...r.players.values()].filter(p=>p.online!==false),r.seed,r.startsAt);
   r.endsAt=r.race.endsAt;
+}if(r.game==='stack'){
+  const ids=[...r.players.values()].filter(p=>p.online!==false).map(p=>p.id),mode=r.stackMode==='turn'&&ids.length>1?'turn':'race';
+  r.stack=Stack.make(mode,ids,r.startsAt,mode==='turn'?rand(ids.length):0);
+  r.endsAt=r.stack.deadline;
 }if(r.game==='memory'){
   r.memory=MemoryTournament.create([...r.players.values()].filter(p=>p.online!==false).map(p=>p.id));
   nextMemoryTurn(r,Date.now());
-}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.race.nextBroadcast=Date.now()+100;r.raceInterval=setInterval(()=>raceTick(r),25);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}if(r.bomb)return;r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
+}io.to(r.code).emit('game-config',{game:r.game,startsAt:r.startsAt,answerAt:r.game==='memory'?r.answerAt:undefined,endsAt:r.endsAt,seed:r.seed});emit(r);if(r.game==='stack'){r.timer=setInterval(()=>{if(Stack.tick(r.stack,Date.now()))finishStack(r)},100);return}if(r.game==='memory'){startMemory(r);return}if(r.game==='race'){r.race.nextBroadcast=Date.now()+100;r.raceInterval=setInterval(()=>raceTick(r),25);broadcastRace(r);return}if(r.game==='snake'){r.snakeInterval=setInterval(()=>snakeTick(r),155);io.to(r.code).emit('snake-state',snakeSnapshot(r))}if(r.bomb)return;r.timer=setTimeout(()=>finish(r),r.endsAt-Date.now()+150)}
 function sendMemory(r, now = Date.now()) {
   io.to(r.code).emit('memory-state', MemoryTournament.snapshot(r.memory, now));
 }
@@ -256,6 +277,7 @@ s.on('join',(input,ack)=>{
         if(!player.body.length&&!player.respawnAt)player.respawnAt=Date.now()+500;
       }
       if(r.memory&&r.phase==='playing')MemoryTournament.rename(r.memory,old.id,s.id);
+      if(r.stack&&r.phase==='playing')Stack.rename(r.stack,old.id,s.id);
       for(const result of r.results||[])if(result.id===old.id)result.id=s.id;
     }
     r.players.set(s.id,{...old,id:s.id,online:true});
@@ -340,10 +362,13 @@ s.on('leave-room',ack=>{
   ack?.({ok:true});
 });
 s.on('select-game',({game}={})=>{const r=get(s);if(r&&r.host===s.id&&['lobby','results'].includes(r.phase)&&GAMES.includes(game)){r.selectedGame=game;emit(r)}});
+s.on('stack-mode',({mode}={})=>{const r=get(s);if(r&&r.host===s.id&&['lobby','results'].includes(r.phase)&&r.selectedGame==='stack'&&['race','turn'].includes(mode)){r.stackMode=mode;emit(r)}});
+s.on('stack-drop',({round,seq,pressed}={},ack)=>{const r=get(s);if(!r||r.phase!=='playing'||r.game!=='stack'||r.round!==round)return ack?.({ok:false});const now=Date.now();if(Stack.tick(r.stack,now)){finishStack(r);return ack?.({ok:false})}const ok=Stack.act(r.stack,s.id,seq,now,pressed);ack?.({ok});if(ok)stackUpdate(r)});
 s.on('start',({game}={})=>{
   const r=get(s);
   if(!r||r.host!==s.id||onlineCount(r)<1||!['lobby','results'].includes(r.phase))return;
   const chosen=r.selectedGame||game;
+  if(chosen==='stack'&&r.stackMode==='turn'&&onlineCount(r)<2)return;
   if(chosen==='race'&&[...r.players.values()].some(player=>player.online!==false&&!player.character))return;
   r.phase='rules'; r.selectedGame=chosen; r.players.forEach(p=>p.ready=false); emit(r);
 });
@@ -400,7 +425,7 @@ s.on('memory-answer',({attempt,index,cell}={})=>{
    sendMemory(r);
  }
 });
-s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='mine'||r.game==='race'||r.game==='bomb'||r.game==='snake'||r.game==='memory'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
+s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='stack'||r.game==='mine'||r.game==='race'||r.game==='bomb'||r.game==='snake'||r.game==='memory'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
 s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||(r.game==='memory'||r.game==='race')||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 启动防护盾`)}else if(t.shield){t.shield=false;s.emit('notice','对方护盾挡住了攻击');r.log.push(`${t.name} 挡住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 对 ${t.name} 使用 ${card}`)}emit(r)});
 s.on('disconnect',()=>{const r=get(s);if(r)markOffline(r,s)});
 });
@@ -412,7 +437,7 @@ const DBFILE=path.join(DATA,'demo.json');let db={players:{},scores:[],challenges
 try{db={...db,...JSON.parse(fs.readFileSync(DBFILE,'utf8'))}}catch{}
 function persist(){const tmp=DBFILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(db));fs.renameSync(tmp,DBFILE)}
 function sid(v){return typeof v==='string'&&/^[a-f0-9-]{12,80}$/i.test(v)}
-function gameId(g){return ['tap','precision','reaction','memory','bomb','mine'].includes(g)}
+function gameId(g){return ['tap','precision','reaction','stack','memory','bomb','mine'].includes(g)}
 function player(id){return db.players[id]}
 function display(id){return player(id)?.name||'玩家'}
 function weekStart(t){const d=new Date(t),day=(d.getUTCDay()+6)%7;return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-day)-8*3600000+(d.getUTCHours()<8? -7*86400000:0)}
