@@ -109,7 +109,8 @@ const rules={
 function showRules(){document.getElementById('stack-mode-dialog')?.remove();
  const players=room.players.filter(p=>p.online!==false);
  const ready=players.find(p=>p.id===myId)?.ready;
- wrap('<section class="panel center"><h2>'+games.find(g=>g[0]===choice)[2]+'</h2><p>'+(choice==='stack'?(room.stackMode==='turn'?'随机首位，依序每人叠一块。每次10秒，故意切细给下一位制造难题；完全错位或超时者输，全局结束。':'每人一座塔，45秒内成功堆叠最多者获胜；失误后可观战。'):rules[choice])+'</p><button class="btn" id="confirm-start" '+(ready?'disabled':'')+'>'+(ready?'等待其他玩家':'开始')+'</button><p>'+players.filter(p=>p.ready).length+' / '+players.length+' 人已准备</p></section><button class="btn secondary" id="leave-room">离开房间</button>');
+ const intro=choice==='stack'&&window.StackGuide?window.StackGuide.markup(room.stackMode==='turn'?'turn':'race'):'<h2>'+games.find(g=>g[0]===choice)[2]+'</h2><p>'+rules[choice]+'</p>';
+ wrap('<section class="panel center">'+intro+'<button class="btn" id="confirm-start" '+(ready?'disabled':'')+'>'+(ready?'等待其他玩家':choice==='stack'?'我明白了，开始':'开始')+'</button><p>'+players.filter(p=>p.ready).length+' / '+players.length+' 人已准备</p></section><button class="btn secondary" id="leave-room">离开房间</button>');
  $('confirm-start').onclick=()=>socket.emit('rules-ready',{round:room.round});
  $('leave-room').onclick=leaveRoom;
  if(room.passMode&&room.host===myId)$('leave-room').textContent='返回大厅';
