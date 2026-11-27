@@ -1,0 +1,8 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),S=require('../public/stack-core');
+test('turn mode rejects non-active player and stale input, first miss loses',()=>{const g=S.make('turn',['a','b'],0);assert.equal(S.act(g,'b',0,1000),false);assert.equal(S.act(g,'a',0,1398),true);assert.equal(S.act(g,'b',0,1500),false);assert.equal(S.act(g,'b',1,1518),true);assert.equal(g.loser,'b');assert.equal(g.finished,true);assert.deepEqual(S.standings(g),['a','b'])});
+test('race towers are independent and end early only when all fail',()=>{const g=S.make('race',['a','b'],0);assert.equal(S.act(g,'a',0,1398),true);assert.equal(g.towers.b.n,0);assert.equal(S.act(g,'b',0,120),true);assert.equal(g.finished,false);assert.equal(S.act(g,'a',1,1518),true);assert.equal(g.finished,true)});
+test('45 second and 10 second limits',()=>{let g=S.make('race',['a'],1000);assert.equal(S.tick(g,45999),false);assert.equal(S.tick(g,46000),true);g=S.make('turn',['a','b'],0,1);assert.equal(S.tick(g,10000),true);assert.equal(g.loser,'b')});
+test('10 player turns wrap in fixed order',()=>{const g=S.make('turn',Array.from({length:10},(_,i)=>'p'+i),0,4);let now=0;for(let i=0;i<10;i++){now+=i<5?1398:1165;assert.equal(S.act(g,g.order[g.turn],g.version,now),true)}assert.equal(g.turn,4);assert.equal(g.towers.shared.n,10)});
+test('reconnect retains ownership and tower',()=>{const g=S.make('race',['a','b'],0);S.act(g,'a',0,1398);S.rename(g,'a','c');assert.equal(g.towers.c.n,1);assert.equal(g.order[0],'c')});
+test('partial overlap and perfect combo',()=>{const t=S.makeTower(0);S.drop(t,800,true);const w=t.blocks.at(-1).w;assert.ok(w<130);for(let i=0;i<3;i++)assert.ok(S.drop(t,t.at+1398,true));assert.equal(t.combo,3);assert.ok(t.blocks.at(-1).w>=w)});
