@@ -15,6 +15,7 @@
  function pulse(el,kind='normal',point){
   if(!el||el.disabled||el.getAttribute('aria-disabled')==='true'||!el.isConnected)return;
   const rect=el.getBoundingClientRect();if(!rect.width||!rect.height)return;
+  if(!el.hasAttribute('data-pc-sound'))window.PartySound?.play(el.id==='jump'?'jump':el.id==='boost'?'boost':el.id==='bomb-send'||el.id==='guess'?'guess':el.id.startsWith('skill-')||el.dataset?.card?'skill':kind);
   const speed=kind==='speed',circle=speed||kind==='joystick'||kind==='stack',cell=kind==='memory'||kind==='mine';
   const duration=reduced()?100:speed?160:220;
   const color=kind==='memory'?'#ffffff':kind==='mine'?'#ffe0a2':kind==='stack'?'#ffe3a9':'#ffc0e3';
