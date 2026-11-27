@@ -7,7 +7,7 @@ window.StackRoom=(()=>{
  function sync(game){if(!game||!state)return;if((game.revision||0)<(state.revision||0))return;state=game;rankDirty=true;if(pending){const t=game.towers[pending.mode==='turn'?'shared':myId];if(game.finished||!t||t.done||(pending.mode==='turn'?game.version!==pending.seq:t.n!==pending.seq)){pending=null;waiting=false}}}
  function leave(){observer?.disconnect();observer=null;bounds=null;pending=null;rankDirty=true;refs={};lastPaintTime=0;rejectedUntil=0;cancelAnimationFrame(frame);frame=0;key='';state=null;root=null;waiting=false;lastRank='';lastView='';stamp='';cam=0}
  function html(){return '<section class="panel stack-panel" style="padding:12px;max-width:640px;margin:12px auto;text-align:center"><h2 style="margin:6px 0">🧱 叠叠乐</h2><p id="stack-mode-label" style="color:#f7bddb;margin:4px"></p><div style="display:flex;justify-content:space-around;gap:8px;margin:12px 0"><div><small>堆叠层数</small><div id="stack-score" style="font-size:28px;font-weight:800;color:#ffc0df">0</div></div><div><small>剩余时间</small><div id="stack-time" style="font-size:28px;font-weight:800">45s</div></div><div><small>完美连击</small><div id="stack-combo" style="font-size:28px;font-weight:800;color:#ffe4a1">0</div></div></div><div id="stack-status" role="status" style="min-height:28px;color:#ffd0e4;font-size:17px;font-weight:700"></div><canvas id="stack-canvas" aria-label="点击屏幕堆叠方块" style="display:block;width:100%;height:min(48vh,430px);touch-action:none;border-radius:16px;background:radial-gradient(ellipse at center,#52334f,#1b152b);cursor:pointer"></canvas><div id="stack-flash" style="height:24px;color:#ffe4a1;font-weight:bold"></div><button class="btn" id="stack-place" style="width:100%;touch-action:manipulation">点击放下方块</button><div id="stack-rank" style="margin:12px 0;text-align:left"></div><p style="opacity:.7;font-size:12px">点击方块 · 精准重合 · 错位切割</p><a href="/" style="color:#f7bddb">返回大厅</a></section>'}
- function mount(){root.innerHTML=html();canvas=$('stack-canvas');ctx=canvas.getContext('2d');for(const id of ['stack-mode-label','stack-score','stack-time','stack-combo','stack-status','stack-place','stack-flash','stack-rank'])refs[id]=$(id);const resize=()=>{bounds=canvas.getBoundingClientRect()};resize();if(typeof ResizeObserver!=='undefined'){observer=new ResizeObserver(resize);observer.observe(canvas)}canvas.addEventListener('pointerdown',e=>{e.preventDefault();place()});const button=refs['stack-place'];button.addEventListener('pointerdown',e=>{e.preventDefault();if(!button.disabled)place()});button.addEventListener('click',e=>{if(e.detail===0&&!button.disabled)place()});lastTime=performance.now();frame=requestAnimationFrame(draw)}
+ function mount(){root.innerHTML=html();canvas=$('stack-canvas');ctx=canvas.getContext('2d');for(const id of ['stack-mode-label','stack-score','stack-time','stack-combo','stack-status','stack-place','stack-flash','stack-rank'])refs[id]=$(id);const resize=()=>{bounds=canvas.getBoundingClientRect()};resize();if(typeof ResizeObserver!=='undefined'){observer=new ResizeObserver(resize);observer.observe(canvas)}canvas.addEventListener('pointerdown',e=>{e.preventDefault();place(e)});const button=refs['stack-place'];button.addEventListener('pointerdown',e=>{e.preventDefault();if(!button.disabled)place(e)});button.addEventListener('click',e=>{if(e.detail===0&&!button.disabled)place(e)});lastTime=performance.now();frame=requestAnimationFrame(draw)}
  function beginSolo(el){leave();root=el;solo=true;soloDone=false;myId='solo';names={solo:'你'};key='solo';localStart=Date.now()+1000;state=S.make('race',['solo'],localStart);offset=0;mount()}
  function enter({room,myId:id,socket:s,root:el}){
   const k=room.code+'-'+room.round;
@@ -17,7 +17,7 @@ window.StackRoom=(()=>{
  }
  function receive(data){if(!solo&&state&&data.round===round)sync(data.game)}
  function now(){return Date.now()+offset}
- function place(){
+ function place(event){
   if(!state)return;
   if(solo&&state.finished){beginSolo(root);return}
   if(waiting||state.finished)return;
@@ -25,6 +25,7 @@ window.StackRoom=(()=>{
   if(!t||t.done||time<g.start||time>=g.deadline||(g.mode==='turn'&&g.order[g.turn]!==myId))return;
   const seq=g.mode==='turn'?g.version:t.n;
   const pressed=Math.max(t.at,Math.min(time,lastPaintTime||time));if(time-t.at<120)return;
+  if(event?.currentTarget===canvas)window.PartyFeedback?.pulse(canvas,'stack',{x:event.clientX,y:event.clientY});else window.PartyFeedback?.pulse(refs['stack-place'],'normal');
   if(solo){S.act(g,myId,seq,time,pressed);return}
   pending={seq,mode:g.mode,pressed,...S.predict(t,pressed,g.mode==='race')};waiting=true;const k=key,p=pending;
   socket.timeout(1800).emit('stack-drop',{round,seq,pressed},(err,result)=>{if(key!==k)return;if(result?.game)sync(result.game);if(pending===p&&(err||!result?.ok||result.game)){if(err||!result?.ok)rejectedUntil=performance.now()+1800;pending=null;waiting=false;rankDirty=true}})
