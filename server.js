@@ -167,6 +167,7 @@ function startMemory(r) {
 async function startWhenReady(r){
   const active=[...r.players.values()].filter(p=>p.online!==false);
   if(r.phase!=='rules'||!active.length||!active.every(p=>p.ready)||r.checkingPass)return;
+  if(r.selectedGame==='stack'&&r.stackMode==='turn'&&active.length<2){r.phase='lobby';emit(r);return}
   if(!roomPass||paidRoom(r))return start(r,r.selectedGame);
   r.checkingPass=true;
   let message;
@@ -426,7 +427,7 @@ s.on('memory-answer',({attempt,index,cell}={})=>{
  }
 });
 s.on('submit',({value}={})=>{const r=get(s),p=r?.players.get(s.id);if(!p||r.game==='stack'||r.game==='mine'||r.game==='race'||r.game==='bomb'||r.game==='snake'||r.game==='memory'||Date.now()<r.startsAt-250||Date.now()>r.endsAt+1000)return;submit(r,p,value)});
-s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||(r.game==='memory'||r.game==='race')||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 启动防护盾`)}else if(t.shield){t.shield=false;s.emit('notice','对方护盾挡住了攻击');r.log.push(`${t.name} 挡住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 对 ${t.name} 使用 ${card}`)}emit(r)});
+s.on('attack',({target,card}={})=>{const r=get(s),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=='playing'||(r.game==='memory'||r.game==='race'||r.game==='stack')||!p||!t||p.id===t.id||p.attackCount>=1||Date.now()<r.startsAt||Date.now()>r.endsAt)return;if(!['freeze','reverse','ghost','steal','shield'].includes(card))return;p.attackCount++;if(card==='shield'){p.shield=true;r.log.push(`${p.name} 启动防护盾`)}else if(t.shield){t.shield=false;s.emit('notice','对方护盾挡住了攻击');r.log.push(`${t.name} 挡住了 ${p.name} 的攻擊`)}else{io.to(t.id).emit('effect',{card,until:Date.now()+1200,from:p.name});if(card==='steal'){p.score+=5;t.score=Math.max(0,t.score-5)}r.log.push(`${p.name} 对 ${t.name} 使用 ${card}`)}emit(r)});
 s.on('disconnect',()=>{const r=get(s);if(r)markOffline(r,s)});
 });
 
