@@ -1,5 +1,5 @@
 /* Android Chromium/WebView touch feedback: retain keyboard focus and text input. */
-:where(button,a,canvas,[role="button"],.race-surface,.snake-stick,input[type="range"]){
+button,a,canvas,[role="button"],.race-surface,.snake-stick,input[type="range"],button *,a *,[role="button"] *{
   -webkit-tap-highlight-color: transparent;
 }
 :where(button,canvas,[role="button"],.race-surface,.snake-stick){
