@@ -13,7 +13,7 @@ const expiresAt = room => room.passExpiresAt || room.createdAt + LIFETIME_MS;
 function state(room) {
   return {
     code: room.code, host: room.host, phase: room.phase,
-    round: room.round, game: room.game, selectedGame: room.selectedGame, stackMode: room.stackMode, results: room.results || [],
+    round: room.round, roundPlayerIds: room.roundPlayerIds, game: room.game, selectedGame: room.selectedGame, stackMode: room.stackMode, results: room.results || [],
     log: room.log || [], createdAt: room.createdAt || Date.now(), passExpiresAt: room.passExpiresAt, passMode: room.passMode,
     players: [...room.players.values()].map(p => ({
       id:p.id, session:p.session || '', name:p.name, character:p.character, score:p.score || 0,
