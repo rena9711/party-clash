@@ -1,6 +1,7 @@
+import {createLightScene} from './light-scene.mjs?v=race-chase-1';
 import '../player-identity.js';
 import {layoutNameplates} from './presentation.mjs';
-import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs';
+import { advance, boost, createRun, DURATION, jump, screenTilt, STEP, tiltInput, clamp } from './simulation.mjs?v=race-center-1';
 
 const get = id => document.getElementById(id);
 const canvas = get('scene');
@@ -30,7 +31,14 @@ const labelWidths=new Map();
 let labelsAt=-Infinity;
 
 let view;
-let run = createRun();
+const characterPicker=get('solo-character');
+get('solo-character-label').hidden=multiplayer;
+if(!multiplayer){
+ for(const [id,icon,name] of PartyIdentity.animals)characterPicker.add(new Option(icon+' '+name,id));
+ characterPicker.onchange=()=>{run.character=characterPicker.value};
+}
+function newRun(){const run=createRun();if(!multiplayer)run.character=characterPicker.value;return run}
+let run = newRun();
 let mode = 'intro';
 let frameId = 0;
 let lastFrame = null;
@@ -55,7 +63,7 @@ function angle() {
 }
 function updateControls() {
   const controls=get('controls');
-  const hide=mode !== 'running' || baseline !== null || rotationPending || (multiplayer && Boolean(roomState?.run?.done));
+  const hide=mode !== 'running' || (baseline !== null && !matchMedia('(pointer: coarse)').matches) || rotationPending || (multiplayer && Boolean(roomState?.run?.done));
   if(controls.hidden!==hide)controls.hidden=hide;
 }
 function show(next) {
@@ -173,7 +181,8 @@ function resetInput() {
 }
 function play() {
   if (!multiplayer) {
-    run=createRun();
+    run=newRun();
+    window.PartySound?.play('start');
     if(createDiagnostics){
       diagnostics.dispose();
       diagnostics=createDiagnostics({city:cityMode,multiplayer});
@@ -218,6 +227,7 @@ function updateHud(remaining = DURATION-run.time) {
   }
 }
 function pulse(id,flicker) {
+  window.PartySound?.play(id==='pickup'?'star':'fail');
   const element=get(id);
   if(id==='effect')element.dataset.kind='';
   else element.classList.remove('active');
@@ -226,7 +236,10 @@ function pulse(id,flicker) {
   else element.classList.add('active');
 }
 function finish() {
+  window.PartySound?.play('finish');
   updateHud();
+  get('final-distance').textContent=Math.round(run.distance)+' 米';
+  get('final-score').textContent='本局得分 '+(run.stars*10)+' 分';
   get('final-stars').textContent='收集星星：'+run.stars+' 颗';
   get('survival').textContent='存活时间：'+run.time.toFixed(1)+' 秒';
   resetInput();
@@ -257,10 +270,10 @@ function updateFrame(now) {
     if(orientationNotice.hidden===rotationPending)orientationNotice.hidden=!rotationPending;
     if (baseline !== null && rawAngle !== null) {
       const sample=clamp(rawAngle-baseline,-70,70);
-      filtered+=(sample-filtered)*(1-Math.exp(-delta*17));
+      filtered+=(sample-filtered)*(1-Math.exp(-delta*26));
     }
     const keyboard=Number(keys.has('ArrowRight'))-Number(keys.has('ArrowLeft'));
-    const direction=keyboard || (rotationPending ? 0 : baseline===null ? touchAxis : tiltInput(filtered,settings.value));
+    const direction=keyboard || (rotationPending ? 0 : touchAxis || (baseline===null ? 0 : tiltInput(filtered,settings.value)));
     if (multiplayer) {
       renderRoom(now,delta,direction);
       schedule();
@@ -297,7 +310,8 @@ function renderRoom(now, delta, direction) {
   const upcoming = state && state.clock < state.startsAt;
   const label = !state?.connected ? '正在连接比赛…' :
     upcoming ? '准备 '+Math.ceil((state.startsAt-state.clock)/1000)+' 秒' :
-    state.run?.done ? '本场已结束，等待其他玩家结算' : '';
+    state.watched ? '观战中 · '+state.watched.name :
+    state.run?.done ? '等待结算…' : '';
   if(roomNotice.hidden===Boolean(label))roomNotice.hidden=!label;
   if (roomNotice.textContent!==label) roomNotice.textContent=label;
   if (!state?.run) return;
@@ -316,7 +330,9 @@ function renderRoom(now, delta, direction) {
   updateHud(Math.max(0,(state.endsAt-Math.max(state.clock,state.startsAt))/1000));
   updateControls();
   const updateLabels=now-labelsAt>=50;
-  const labels=view.render(run,run.time,false,state.others,state.runners.length,updateLabels);
+  const focus=state.watched || run;
+  const labels=view.render(focus,focus.time,false,state.others,state.runners.length,updateLabels);
+  if(state.watched) for(const label of labels) label.self=false;
   if(updateLabels){
     renderNameplates(labels);
     labelsAt=now;
@@ -371,7 +387,7 @@ function performAction(action) {
   }
 }
 if (multiplayer) {
-  const {connectRaceView} = await import('./room-client.mjs');
+  const {connectRaceView} = await import('./room-client.mjs?v=race-center-1');
   network=connectRaceView(diagnostics);
   if(diagnostics)window.addEventListener('message',event=>{
     if(event.origin===location.origin&&event.source===window.parent&&event.data?.type==='party-race-rtt'&&
@@ -387,7 +403,7 @@ if (multiplayer) {
   get('error').querySelector('a').hidden=true;
 }
 function intro() {
-  run=createRun();
+  run=newRun();
   lastFrame=null;
   show('intro');
   schedule();
@@ -395,7 +411,8 @@ function intro() {
 function resize() {
   if (!view) return;
   view.resize(Math.max(1,canvas.clientWidth),Math.max(1,canvas.clientHeight));
-  view.render(run,mode==='intro'?previewTime:run.time,mode==='intro',roomState?.others,roomState?.runners?.length);
+  const focus=roomState?.watched || run;
+  view.render(focus,mode==='intro'?previewTime:focus.time,mode==='intro',roomState?.others,roomState?.runners?.length);
 }
 function refreshTouch() {
   touchAxis=clamp([...touches.values()].reduce((sum,value)=>sum+value,0),-1,1);
@@ -408,7 +425,8 @@ get('pause').onclick=pause;
 get('reset').onclick=intro;
 get('resume').onclick=()=>{show('running');schedule();};
 get('recalibrate').onclick=recalibrateManually;
-get('jump').onclick=()=>performAction('jump');
+get('jump').onpointerdown=event=>{if(event.button===0)performAction('jump');};
+get('jump').onclick=event=>{if(event.detail===0)performAction('jump');};
 get('boost').onclick=()=>performAction('boost');
 for(const [id,direction] of [['left',-1],['right',1]]) {
   const control=get(id);
@@ -449,6 +467,7 @@ window.addEventListener('keyup',event=>keys.delete(event.key));
 window.addEventListener('blur',resetInput);
 window.addEventListener('deviceorientation',readSensor);
 window.addEventListener('resize',resize);
+if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(canvas);
 window.addEventListener('orientationchange',recalibrateOrientation);
 screen.orientation?.addEventListener?.('change',recalibrateOrientation);
 document.addEventListener('visibilitychange',()=>{
@@ -461,23 +480,38 @@ window.addEventListener('pagehide',event=>{
   if (!event.persisted) view?.dispose();
 });
 window.addEventListener('pageshow',schedule);
-canvas.addEventListener('webglcontextlost',event=>{
+const lightCanvas = document.createElement('canvas');
+lightCanvas.className = 'light-scene';
+lightCanvas.setAttribute('aria-hidden', 'true');
+canvas.after(lightCanvas);
+const lightView = createLightScene(lightCanvas, PartyIdentity.animals);
+let richView;
+function useView(next) {
+  view = next;
+  lightCanvas.hidden = next !== lightView;
+  resize();
+  schedule();
+}
+canvas.addEventListener('webglcontextlost', event => {
   event.preventDefault();
-  pause();
+  useView(lightView);
 });
-canvas.addEventListener('webglcontextrestored',resize);
-
-try {
-  const {createScene}=await import('./scene.mjs');
-  view=createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
+canvas.addEventListener('webglcontextrestored', () => {
+  if (richView) useView(richView);
+});
+useView(lightView);
+get('start').disabled = false;
+if (multiplayer) window.parent.postMessage({type:'party-race-ready'}, location.origin);
+async function loadRichScene() {
+  const {createScene} = await import('./scene.mjs?v=race-center-1');
+  richView = createScene(canvas,{cityMode,diagnostics:diagnosticMode?{
     get active(){return diagnostics.active},
     gpu:ms=>diagnostics.gpu(ms),
     render:(stats,ms)=>diagnostics.render(stats,ms)
   }:null});
-  resize();
-  get('start').disabled=false;
-  schedule();
-} catch {
-  get('error-message').textContent=multiplayer?'此设备无法显示多人 3D。可等待比赛结算。':'请确认浏览器支持 WebGL 2，或使用原版继续游戏。';
-  show('error');
+  useView(richView);
 }
+if (query.get('view') !== 'light') loadRichScene().catch(error => {
+  console.warn('3D race rendering unavailable', error);
+  useView(lightView);
+});

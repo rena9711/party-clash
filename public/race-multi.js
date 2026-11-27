@@ -25,14 +25,41 @@ window.RaceMulti = (() => {
     leave();
     savedResult=null;
     resultPanel?.remove();
+    window.scrollTo(0, 0);
     document.body.classList.add('rm-active');
-    const frame = document.createElement('iframe');
-    frame.className = 'race-3d-frame';
-    frame.title = '跑得快 · 多人 3D';
-    frame.allow = 'accelerometer; gyroscope';
-    active = {code: room.code, round: room.round, playerId: myId, socket, frame};
-    frame.src='/race-v3/?mode=room'+(diagnosing?'&diagnostics=1&city='+city:'');
-    root.replaceChildren(frame);
+    const stage = document.createElement('section');
+    stage.className = 'race-room-stage';
+    const loading = document.createElement('div');
+    loading.className = 'entry-wait';
+    loading.innerHTML = '<h2>跑得快</h2><p role="status"></p><button class="btn" type="button" hidden>重试轻量赛道</button>';
+    const retry = loading.querySelector('button');
+    const session = active = {code: room.code, round: room.round, playerId: myId, socket, stage, loading};
+    stage.append(loading);
+    root.replaceChildren(stage);
+    function loadTrack(light) {
+      clearTimeout(session.loadTimeout);
+      session.ready = false;
+      session.frame?.remove();
+      const frame = document.createElement('iframe');
+      frame.className = 'race-3d-frame';
+      frame.title = '跑得快 · 多人赛道';
+      frame.allow = 'accelerometer; gyroscope';
+      frame.hidden = true;
+      session.frame = frame;
+      loading.hidden = false;
+      loading.querySelector('p').textContent = '正在加载多人赛道…';
+      retry.hidden = true;
+      session.loadTimeout = setTimeout(() => {
+        loading.querySelector('p').textContent = '赛道加载较慢，可以重试轻量赛道。';
+        retry.hidden = false;
+      }, 6000);
+      const options = new URLSearchParams({mode:'room', v:'race-center-1'});
+      if (light) options.set('view', 'light');
+      frame.src = route('/race-v3/?'+options);
+      stage.append(frame);
+    }
+    retry.onclick = () => loadTrack(true);
+    loadTrack(false);
   }
 
   function receive(state) {
@@ -45,6 +72,10 @@ window.RaceMulti = (() => {
     if (!active || event.origin !== origin || event.source !== active.frame.contentWindow) return;
     if (event.data?.type === 'party-race-ready') {
       active.ready = true;
+      clearTimeout(active.loadTimeout);
+      active.loading.hidden = true;
+      active.frame.hidden = false;
+      window.scrollTo(0, 0);
       if(diagnosing&&!active.probe){
         const session=active;
         active.probe=setInterval(()=>{
@@ -84,7 +115,8 @@ window.RaceMulti = (() => {
         });
       }
     }
-    active?.frame.remove();
+    clearTimeout(active?.loadTimeout);
+    active?.stage.remove();
     active = null;
     document.body.classList.remove('rm-active');
   }

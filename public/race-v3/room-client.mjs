@@ -1,4 +1,4 @@
-import {advanceMotion, BOUNDARY, clamp, createTrack, jump} from './simulation.mjs';
+import {advanceMotion, BOUNDARY, clamp, createTrack, DURATION, jump, raceSpeed} from './simulation.mjs?v=race-center-1';
 import {unpackRace} from './wire.mjs';
 
 const MAX_AGE = 600;
@@ -6,13 +6,15 @@ const INTERPOLATION_MS = 135;
 const MAX_INTERPOLATION_MS = 250;
 const MAX_EXTRAPOLATION_MS = 100;
 const SEND_INTERVAL = 65;
+const MAX_SPEED = raceSpeed(DURATION, Infinity);
 const KEEPALIVE = 200;
 const interpolate = (a,b,t) => a+(b-a)*t;
 const poseRate={x:10,y:10,distance:27,vx:Infinity};
 
 export function connectRaceView(diagnostics) {
   let packet, seed, track, mine, display, receivedAt, clockOffset;
-  let displayedObjects, lastSent=-Infinity, sentAxis;
+  let watchedSlot, watchedObjects, displayedObjects, lastSent=-Infinity, sentAxis;
+  let localAxis=0, axisChangedAt=-Infinity;
   let interpolationDelay=INTERPOLATION_MS, playback=-Infinity;
   const history=[];
   const remote=new Map();
@@ -37,6 +39,9 @@ export function connectRaceView(diagnostics) {
       history.length=0;
       remote.clear();
       display=null;
+      localAxis=0;
+      axisChangedAt=-Infinity;
+      watchedSlot=undefined;
       clockOffset=undefined;
       interpolationDelay=INTERPOLATION_MS;
       playback=-Infinity;
@@ -59,14 +64,14 @@ export function connectRaceView(diagnostics) {
         const position={x:display.x,vx:display.vx,y:display.y,vy:display.vy,distance:display.distance};
         Object.assign(display,mine,position);
       }
+      const watched = mine.done && (state.runners.find(runner=>runner.slot===watchedSlot && !runner.done) ||
+        state.runners.find(runner=>!runner.done));
+      watchedSlot=watched?.slot;
       const taken=new Map(state.consumed);
-      displayedObjects=[];
-      for(const item of track){
-        if(item.at<mine.distance-8)continue;
-        if(item.at>=mine.distance+79)break;
-        displayedObjects.push(taken.has(item.id)?{...item,used:true,impactTime:taken.get(item.id)}:item);
-      }
+      displayedObjects=nearbyObjects(mine.distance,taken);
+      watchedObjects=watched ? nearbyObjects(watched.distance,taken) : null;
     }
+
     history.push({now:state.now, runners:new Map(state.runners.map(runner=>[runner.slot,runner]))});
     if(history.length>12)history.shift();
     if(diagnostics?.active){
@@ -76,10 +81,19 @@ export function connectRaceView(diagnostics) {
     }
   });
 
+  function nearbyObjects(distance,taken) {
+    const objects=[];
+    for(const item of track){
+      if(item.at<distance-8)continue;
+      if(item.at>=distance+79)break;
+      objects.push(taken.has(item.id)?{...item,used:true,impactTime:taken.get(item.id)}:item);
+    }
+    return objects;
+  }
+
   function send(input) {
     if(packet?.connected)window.parent.postMessage({type:'party-race-input', input}, origin);
   }
-  window.parent.postMessage({type:'party-race-ready'}, origin);
   const others=[];
   const result={others};
   return {
@@ -95,10 +109,14 @@ export function connectRaceView(diagnostics) {
       const clock=state.now+clamp(age,0,MAX_AGE);
       Object.assign(result,{clock, startsAt:state.startsAt, endsAt:state.endsAt,
         connected:connected&&age<MAX_AGE, moving:Boolean(mine&&!mine.done&&clock>=state.startsAt),
-        run:display, runners:state.runners});
+        run:display, watched:null, runners:state.runners});
       if(!mine)return result;
       if(result.connected&&result.moving){
         const axis=Math.round(direction*20)/20;
+        if (Math.abs(direction-localAxis)>=.12 || (direction===0 && localAxis!==0)) {
+          localAxis=direction;
+          axisChangedAt=now;
+        }
         const changed=sentAxis!==axis;
         if((changed && (axis===0 || now-lastSent>=SEND_INTERVAL)) ||
            (axis!==0 && now-lastSent>=KEEPALIVE)){
@@ -106,17 +124,30 @@ export function connectRaceView(diagnostics) {
           lastSent=now;
           sentAxis=axis;
         }
+        const beforeTurn=display.x;
         advanceMotion(display,delta,direction);
         const correction=1-Math.exp(-delta*9);
         const overhang=clamp(clock-state.now,0,160)/1000;
         const targetX=clamp(mine.x+mine.vx*overhang,-BOUNDARY,BOUNDARY);
-        display.x+=(targetX-display.x)*correction;
+        const drift=targetX-display.x;
+        // Let a new local turn lead briefly while the server receives the input.
+        if(now-axisChangedAt>200 || Math.abs(drift)>1.45){
+          const correctionX=Math.sign(drift)*Math.min(2*delta,Math.max(0,Math.abs(drift)-.06)*(1-Math.exp(-delta*4)));
+          const movement=display.x-beforeTurn;
+          // A late snapshot must not cancel the player's turn as they cross the track.
+          const limit=direction!==0 && correctionX*direction<0 ? Math.max(0,movement*direction)*.35 : Infinity;
+          display.x=clamp(display.x+Math.sign(correctionX)*Math.min(Math.abs(correctionX),limit),-BOUNDARY,BOUNDARY);
+        }
         // A predicted jump may be briefly ahead of the server; reconcile against
         // airborne samples without continually restarting a jump on the ground.
         if(mine.y>.02 && Math.abs(display.y-mine.y)>.24)
           display.y+=(mine.y-display.y)*correction;
-        const speed=12+Math.min(mine.time*.12,5.4)+(mine.time<mine.boostUntil?5:0);
-        display.distance=interpolate(display.distance,mine.distance+speed*overhang,1-Math.exp(-delta*20));
+        const speed=raceSpeed(mine.time,mine.boostUntil);
+        const distance=mine.distance+speed*overhang;
+        const step=speed*delta;
+        const correctionZ=clamp((distance-display.distance-step)*(1-Math.exp(-delta*7)),-step*.4,step*.4);
+        const furthest=Math.max(display.distance,distance+3);
+        display.distance=Math.min(display.distance+step+correctionZ,furthest);
       } else {
         sentAxis=undefined;
       }
@@ -127,10 +158,10 @@ export function connectRaceView(diagnostics) {
       const next=history[upper<0?history.length-1:upper];
       const previous=history[upper<0?history.length-1:Math.max(upper-1,0)];
       const blend=clamp((playback-previous.now)/Math.max(1,next.now-previous.now),0,1);
-      const beyond=result.connected&&result.moving ? clamp(playback-next.now,0,MAX_EXTRAPOLATION_MS)/1000 : 0;
+      const beyond=result.connected&&(result.moving||watchedSlot!==undefined) ? clamp(playback-next.now,0,MAX_EXTRAPOLATION_MS)/1000 : 0;
       const earlier=history.at(-2);
       for(const runner of next.runners.values()){
-        if(runner.slot===mine.slot||runner.done)continue;
+        if(runner.slot===mine.slot||runner.done||state.runners.find(current=>current.slot===runner.slot)?.done)continue;
         const from=previous.runners.get(runner.slot)??runner;
         let pose=remote.get(runner.slot);
         if(!pose){
@@ -145,13 +176,16 @@ export function connectRaceView(diagnostics) {
           if(beyond>0 && earlier){
             const last=earlier.runners.get(runner.slot);
             if(key==='distance' && last)
-              target+=clamp((runner.distance-last.distance)*1000/Math.max(1,next.now-earlier.now),0,23)*beyond;
+              target+=clamp((runner.distance-last.distance)*1000/Math.max(1,next.now-earlier.now),0,MAX_SPEED)*beyond;
             if(key==='x')target=clamp(target+runner.vx*beyond,-BOUNDARY,BOUNDARY);
           }
           const limit=key==='vx'?Infinity:poseRate[key]*delta;
           pose[key]+=clamp(target-pose[key],-limit,limit);
         }
-        others.push(pose);
+        if (runner.slot===watchedSlot) {
+          pose.objects=watchedObjects;
+          result.watched=pose;
+        } else others.push(pose);
       }
       return result;
     }

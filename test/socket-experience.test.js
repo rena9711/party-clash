@@ -71,7 +71,10 @@ async function start(game,players){
     assert.ok(all.every(result=>result.ok));
   }
   const started=until(owner.socket,'room',r=>r.phase==='playing'&&r.game===game);
+  const rules=until(owner.socket,'room',r=>r.phase==='rules');
   owner.socket.emit('start',{game});
+  const instructions=await rules;
+  for(const p of players)p.socket.emit('rules-ready',{round:instructions.round});
   await started;
   return code;
 }
@@ -186,18 +189,20 @@ test('identity validation, atomic character reservation, start gate, and release
   const stillLobby=until(loser.socket,'room',r=>r.phase==='lobby');
   assert.equal((await ack(loser,'race-character','rabbit')).ok,true);
   await stillLobby;
-  assert.equal((await loser.socket.timeout(5000).emitWithAck('leave-room')).ok,true);
+  const hostCharacter=winner===a?'fox':'rabbit';
+  const guestCharacter=winner===a?'rabbit':'fox';
+  assert.equal((await b.socket.timeout(5000).emitWithAck('leave-room')).ok,true);
   await request(c,'join',{code});
-  assert.equal((await ack(c,'race-character','rabbit')).ok,true);
-  winner.socket.disconnect();
-  const again=await player(winner.name,winner.session);
-  const originalName=winner===a?'狐狸甲':'👨‍👩‍👧‍👦'.repeat(12);
-  const reconnected=until(again.socket,'room',r=>r.players.some(p=>p.name===originalName&&p.character==='fox'));
+  assert.equal((await ack(c,'race-character',guestCharacter)).ok,true);
+  a.socket.disconnect();
+  const again=await player(a.name,a.session);
+  const originalName='狐狸甲';
+  const reconnected=until(again.socket,'room',r=>r.players.some(p=>p.name===originalName&&p.character===hostCharacter));
   await request(again,'join',{code,resume:true,name:'不能覆盖原昵称'});
   const state=await reconnected;
   assert.equal(state.players.length,2);
   assert.equal(state.players.find(p=>p.id===again.id).name,originalName);
-  assert.equal(state.players.find(p=>p.id===c.id).character,'rabbit');
+  assert.equal(state.players.find(p=>p.id===c.id).character,guestCharacter);
 });
 for (const count of [2,5,10]) {
   test('3D race synchronizes '+count+' players, reconnects and settles once', {timeout:62000},async()=>{
@@ -269,3 +274,40 @@ for (const count of [2,5,10]) {
   });
 }
 });
+
+for(const game of ['mine','bomb']){
+  test(game+' enforces turns and shares the explosion result',{timeout:30000},async()=>{
+    const players=await Promise.all([player('甲方'),player('乙方')]);
+    let room;
+    players[0].socket.on('room',snapshot=>{room=snapshot});
+    await start(game,players);
+    await new Promise(resolve=>setTimeout(resolve,Math.max(0,room.startsAt-Date.now()+30)));
+    const act=(p,number)=>game==='mine'
+      ? p.socket.emit('mine-action',{cell:number,round:room.round})
+      : p.socket.emit('bomb-guess',{number});
+    const first=players.find(p=>p.id===room.bomb.turnId);
+    act(players.find(p=>p!==first),2);
+    if(game==='bomb'){act(first,1);act(first,100)}
+    else first.socket.emit('mine-action',{pass:true,round:room.round});
+    await new Promise(resolve=>setTimeout(resolve,100));
+    assert.equal(room.bomb.history.length,0);
+    for(let cell=1;room.phase==='playing';cell++){
+      const actor=players.find(p=>p.id===room.bomb.turnId);
+      const count=room.bomb.history.length;
+      const changed=until(players[0].socket,'room',r=>r.bomb.history.length===count+1);
+      act(actor,game==='mine'?cell:Math.floor((room.bomb.low+room.bomb.high)/2));
+      await changed;
+      if(game==='mine'&&room.phase==='playing'&&cell%2===0){
+        const passed=until(players[0].socket,'room',r=>r.bomb.turnId!==actor.id);
+        actor.socket.emit('mine-action',{pass:true,round:room.round});
+        await passed;
+      }
+    }
+    if(game==='mine'){
+      assert.equal(room.results.find(p=>p.exploded).id,room.bomb.loser);
+      assert.equal(room.results.reduce((sum,p)=>sum+p.earned,0),room.bomb.history.length*10);
+      assert.ok(room.players.every(p=>p.minePoints===p.score));
+    }else assert.equal(room.results.at(-1).id,room.bomb.loser);
+    for(const p of players)p.socket.disconnect();
+  });
+}

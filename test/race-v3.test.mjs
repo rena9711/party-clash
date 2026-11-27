@@ -282,6 +282,10 @@ test('room input predicts local motion, coalesces steady input and retains autho
     for(let step=1;step<=7;step++)view.sample(now+step*16,.016,1);
     const predicted=view.sample(now+128,.016,1).run;
     assert.ok(predicted.x>initial+.1);
+    // A turn begins locally while the only server snapshot still has x=0.
+    assert.ok(predicted.x-initial>.50);
+    assert.ok(predicted.distance>1.3);
+
     assert.equal(predicted.stars,0);
     assert.equal(messages.filter(p=>p.input?.axis===1).length,1);
     view.sample(now+150,.016,0);
@@ -306,6 +310,45 @@ test('room input predicts local motion, coalesces steady input and retains autho
     assert.equal(view.sample(receipt+395,.045).others[0].distance,capped);
     deliver(1650,false);
     assert.equal(view.sample(performance.now(),0).connected,false);
+    race.runners[0].run.done=true;
+    race.runners[0].run.health=0;
+    race.runners[1].run.distance=120;
+    time=1750;
+    deliver(1850);
+    const spectating=view.sample(time+180,.10,1);
+    assert.equal(spectating.run.id,'local');
+    assert.equal(spectating.moving,false);
+    assert.equal(spectating.watched.id,'other');
+    assert.ok(spectating.watched.objects.some(object=>object.at>120));
+    const previousDistance=spectating.watched.distance;
+    race.runners[1].run.distance=126;
+    time=1950;
+    deliver(2050);
+    assert.ok(view.sample(time+180,.10,1).watched.distance>previousDistance);
+    race.runners[1].run.done=true;
+    time=2150;
+    deliver(2250);
+    assert.equal(view.sample(time+180,.10).watched,null);
+
+    // Keep the server's lateral position behind the local player during a gentle turn.
+    for (const direction of [1,-1]) {
+      race.seed++;
+      const local=race.runners[0].run;
+      Object.assign(local,{done:false,health:3,x:-direction*.5,vx:0,distance:30});
+      let lastX=local.x, lastDistance=local.distance;
+      for (let frame=1;frame<=48;frame++) {
+        time+=16;
+        if(frame===1 || frame%6===0) deliver(time+500);
+        const pose=view.sample(time,.016,direction*.22).run;
+        assert.ok((pose.x-lastX)*direction>0, 'local turn should keep moving through center');
+        assert.ok(pose.distance>=lastDistance, 'the track should not move backward after a delayed packet');
+        lastX=pose.x;
+        lastDistance=pose.distance;
+      }
+      assert.ok(lastX*direction>.15, 'gentle turn should cross the center with delayed positions');
+    }
+
+
   } finally {
     globalThis.performance=originalPerformance;
     if(originalWindow===undefined)delete globalThis.window;

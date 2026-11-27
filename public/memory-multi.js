@@ -33,14 +33,19 @@ window.MemoryMulti = (() => {
       button.style.setProperty('--cell', color);
       button.setAttribute('aria-label', '第 '+(cell+1)+' 格');
       button.disabled = true;
-      button.onclick = () => {
+      const answer = () => {
         const state = current.state;
         const player = state?.answers.find(answer => answer.id === current.myId);
         if (view !== current || button.disabled || !player || player.done || !socket.connected) return;
-        current.pending = { index: player.correct, until: performance.now() + 500 };
-        current.cells.forEach(button => { button.disabled = true; });
-        socket.emit('memory-answer', { attempt: state.attempt, index: player.correct, cell });
+        const index = Math.max(player.correct,current.nextIndex || 0);
+        if(index>=state.count)return;
+        current.nextIndex=index+1;
+        socket.emit('memory-answer', { attempt: state.attempt, index, cell });
       };
+      button.onpointerdown = event => {
+        if(event.isPrimary && event.button===0){event.preventDefault();answer()}
+      };
+      button.onclick = event => {if(!window.PointerEvent || event.detail===0)answer()};
       grid.append(button);
       current.cells.push(button);
     }
@@ -52,7 +57,7 @@ window.MemoryMulti = (() => {
     if (!view || !view.root.contains(view.status) || state.attempt < view.state?.attempt) return;
     if (view.state?.attempt !== state.attempt) {
       view.cues.clear();
-      view.pending = null;
+      view.nextIndex=0;
       view.visualTime = -Infinity;
     }
     view.state = state;
@@ -60,7 +65,7 @@ window.MemoryMulti = (() => {
     view.latestOffset = Math.max(view.latestOffset ?? -Infinity, offset);
     for (const cue of state.cues) view.cues.set(cue.on, cue);
     const player = state.answers.find(answer => answer.id === view.myId);
-    if (view.pending && (player?.done || player?.correct !== view.pending.index)) view.pending = null;
+
   }
 
   function paint(time) {
@@ -78,17 +83,19 @@ window.MemoryMulti = (() => {
     const status = prefix + (now < state.startsAt ? '准备 '+Math.ceil((state.startsAt - now) / 1000)+' 秒' :
       !answering ? (now >= state.answerAt ? '等待同步' : '记住发光顺序') :
       !player ? '答题中' : player.done ? '作答结束 · 答对 '+player.correct+' 格' :
-      '剩余 '+remaining+' 秒 · 答对 '+player.correct+' / '+state.count+' 格');
+      '开始作答 · 剩余 '+remaining+' 秒 · 答对 '+player.correct+' / '+state.count+' 格');
     if (view.status.textContent !== status) view.status.textContent = status;
     let lit = null;
     for (const [start, cue] of view.cues) {
       if (cue.off <= now) view.cues.delete(start);
       else if (start <= now) lit = cue.cell;
     }
-    const locked = !answering || !player || player.done || time < view.pending?.until;
+    if (lit !== null && lit !== view.lastLit) window.PartySound?.play('memory');
+    view.lastLit = lit;
+    const locked = !answering || !player || player.done;
     for (const [i, button] of view.cells.entries()) {
       button.classList.toggle('is-lit', i === lit);
-      button.disabled = locked;
+      if(button.disabled !== locked)button.disabled = locked;
     }
   }
 

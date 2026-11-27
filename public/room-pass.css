@@ -1,0 +1,24 @@
+.room-pass {
+  margin-block: 16px;
+  padding: 16px;
+  border: 1px solid #62475c;
+  border-radius: 14px;
+  background: #231b2a;
+}
+.room-pass p { margin-block: 8px; }
+.room-pass small { display: block; margin-top: 8px; color: #e9b8d0; }
+.pass-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.pass-heading span, .pass-notice { color: #ffc6e2; }
+.pass-remaining { font-variant-numeric: tabular-nums; }
+.pass-notice:empty { display: none; }
+.pass-checkout {
+  width: min(390px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 20px;
+  color: #fbe6ef;
+  background: #231b2a;
+  border: 1px solid #62475c;
+  border-radius: 16px;
+}
+.pass-checkout::backdrop { background: rgb(0 0 0 / 70%); }
+.pass-checkout img:not([hidden]) { display: block; max-width: 100%; height: auto; margin: 12px auto; }

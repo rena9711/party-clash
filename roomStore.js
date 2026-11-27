@@ -8,12 +8,13 @@ const pool = configured ? new Pool({
   idleTimeoutMillis: 30000
 }) : null;
 const pending = new Map();
-const LIFETIME_MS = 24 * 60 * 60 * 1000;
+const { lifetime: LIFETIME_MS } = require('./roomPass');
+const expiresAt = room => room.passExpiresAt || room.createdAt + LIFETIME_MS;
 function state(room) {
   return {
     code: room.code, host: room.host, phase: room.phase,
-    round: room.round, game: room.game, selectedGame: room.selectedGame, results: room.results || [],
-    log: room.log || [], createdAt: room.createdAt || Date.now(),
+    round: room.round, roundPlayerIds: room.roundPlayerIds, game: room.game, selectedGame: room.selectedGame, stackMode: room.stackMode, results: room.results || [],
+    log: room.log || [], createdAt: room.createdAt || Date.now(), passExpiresAt: room.passExpiresAt, passMode: room.passMode,
     players: [...room.players.values()].map(p => ({
       id:p.id, session:p.session || '', name:p.name, character:p.character, score:p.score || 0,
       ready: false, submitted: Boolean(p.submitted),
@@ -27,8 +28,11 @@ function save(room) {
   const previous = pending.get(code) || Promise.resolve();
   const next = previous.catch(() => {}).then(() =>
     pool.query(
-      'INSERT INTO party_rooms (code, payload, expires_at) VALUES ($1,$2::jsonb,NOW()+INTERVAL \'24 hours\') ON CONFLICT (code) DO UPDATE SET payload=EXCLUDED.payload, expires_at=EXCLUDED.expires_at',
-      [code, JSON.stringify(data)]
+      `INSERT INTO party_rooms (code, payload, expires_at) VALUES ($1,$2::jsonb,$3) ON CONFLICT (code) DO UPDATE SET payload=CASE WHEN party_rooms.payload->>'createdAt'=EXCLUDED.payload->>'createdAt'
+        AND party_rooms.payload ? 'passExpiresAt' AND NOT (EXCLUDED.payload ? 'passExpiresAt')
+        THEN EXCLUDED.payload || jsonb_build_object('passExpiresAt',party_rooms.payload->'passExpiresAt','passMode',party_rooms.payload->'passMode') ELSE EXCLUDED.payload END,
+        expires_at=GREATEST(party_rooms.expires_at, EXCLUDED.expires_at)`,
+      [code, JSON.stringify(data), new Date(expiresAt(data))]
     )
   );
   pending.set(code, next);
@@ -64,4 +68,4 @@ async function init(rooms) {
   console.log('Restored',rooms.size,'rooms from PostgreSQL');
   return { persistent:true, restored:rooms.size };
 }
-module.exports = {init, save, remove, configured, LIFETIME_MS};
+module.exports = {init, save, remove, configured, pool, expiresAt};

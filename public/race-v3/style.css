@@ -68,3 +68,5 @@ a{display:inline-block;padding:8px;color:#ece0ff}
 .race-diagnostics summary{cursor:pointer}
 .race-diagnostics p{margin:5px 0}
 .race-diagnostics button{margin:2px 4px 2px 0;padding:4px 8px}
+
+.light-scene{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
