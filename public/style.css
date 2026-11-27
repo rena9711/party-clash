@@ -57,3 +57,14 @@ header .pill{flex:none;white-space:nowrap}
 
 .race-room-stage{position:fixed;inset:0;z-index:10;background:#171323}
 .race-room-stage [hidden]{display:none!important}
+
+.room-game-choice .tile{position:relative;min-height:82px}
+.room-game-choice .tile:disabled{opacity:1;cursor:default}
+.room-game-choice .tile.selected{border:2px solid #ffc0df;background:#53364e}
+.room-game-choice .room-game-selected{display:block;font-size:11px;color:#ffd1e7;margin-top:4px}
+.room-game-current{font-size:14px;color:#ffc0df;text-align:center}
+.character-card.is-taken{opacity:1}
+.character-card.is-taken .character-preview,.character-card.is-taken b{opacity:.62}
+.character-card small.character-taken{display:inline-block;background:#187849;color:#e2ffed;border:1px solid #51bf86;border-radius:7px;padding:4px 9px;font-weight:700}
+.character-card small.character-pending{color:#ffe1a0}
+.room-header-tools{display:flex;align-items:center;gap:6px}
