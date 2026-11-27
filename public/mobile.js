@@ -3,7 +3,7 @@ function drawMyRooms(){const el=$('myRooms');if(!el)return;const now=Date.now()+
 async function refreshMyRooms(){if(roomFetchBusy||!$('myRooms'))return;const session=localStorage.getItem('clashSession');if(!session)return;roomFetchBusy=true;try{const data=await api('my-rooms',{session});myRoomList=data.rooms;roomClockOffset=data.now-Date.now();roomFetchAt=Date.now();drawMyRooms()}catch(e){roomFetchAt=Date.now();const el=$('myRooms');if(el&&!myRoomList.length){el.dataset.signature='';el.innerHTML='<strong>🎮 我的房间</strong><p>房间加载失败，正在重试…</p>'}}finally{roomFetchBusy=false}}
 setInterval(()=>{if(!$('myRooms'))return;drawMyRooms();if(Date.now()-roomFetchAt>15000)refreshMyRooms()},1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshMyRooms()});
-function home(){const desc={tap:'10秒手速挑战',precision:'挑战精准时机',stack:'个人竞速 · 轮流挑战',memory:'记忆力大考验',bomb:'轮流猜数 · 多人',mine:'步步惊心'};shell(`
+function home(){const desc={tap:'10秒手速挑战',precision:'挑战精准时机',stack:'层层攀升 · 叠你一刀',memory:'记忆力大考验',bomb:'轮流猜数 · 多人',mine:'步步惊心'};shell(`
 <section class="home-hero">
  <div class="home-hero-copy">
   <div class="home-kicker"><span class="pulse-dot"></span> PARTY CLASH · 好友派对游戏</div>
